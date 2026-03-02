@@ -407,9 +407,9 @@ function resizeCanvas() {
   const gridScreenW = (GRID_W + GRID_H) * BASE_TILE_W / 2; // 704
   const gridScreenH = (GRID_W + GRID_H) * BASE_TILE_H / 2 + 3.2 * BASE_Z; // 448
 
-  // キャンバスの85%を埋めるようにスケール計算
-  const scaleX = (canvas.width * 0.88) / gridScreenW;
-  const scaleY = (canvas.height * 0.85) / gridScreenH;
+  // キャンバスをほぼ全面埋めるスケール計算（隙間を最小化）
+  const scaleX = (canvas.width * 0.98) / gridScreenW;
+  const scaleY = (canvas.height * 0.96) / gridScreenH;
   const scale = Math.min(scaleX, scaleY);
 
   // タイルサイズを動的に更新（ズーム適用）
@@ -420,7 +420,7 @@ function resizeCanvas() {
 
   // オフセット: グリッドの中心をキャンバスの中心に合わせる（パン適用）
   const centerIsoX = (GRID_W / 2 - GRID_H / 2) * TILE_W / 2;
-  const centerIsoY = (GRID_W / 2 + GRID_H / 2) * TILE_H / 2 - 1.0 * Z_SCALE;
+  const centerIsoY = (GRID_W / 2 + GRID_H / 2) * TILE_H / 2 - 0.6 * Z_SCALE;
   OFFSET_X = canvas.width / 2 - centerIsoX + panOffX;
   OFFSET_Y = canvas.height / 2 - centerIsoY + panOffY;
 }
