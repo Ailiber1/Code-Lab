@@ -111,11 +111,14 @@ wss.on('connection', (ws, req) => {
 // SECTION: Connection Handler
 // ============================================================
 function handleConnect(ws, msg) {
-  const projectDir = msg.projectDir;
+  let projectDir = msg.projectDir;
   if (!projectDir) {
     ws.send(JSON.stringify({ type: 'error', message: 'projectDir is required' }));
     return;
   }
+
+  // 入力のクリーニング: "cd "プレフィックスや前後の空白・引用符を除去
+  projectDir = projectDir.trim().replace(/^cd\s+/i, '').replace(/^["']|["']$/g, '').trim();
 
   // パストラバーサル防止: 正規化して存在チェック
   const resolvedDir = path.resolve(projectDir);
