@@ -225,15 +225,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
         <button id="btnZoomOut" title="ズームアウト">&#x1F50D;-</button>
         <button id="btnZoomReset" title="リセット">&#x21BA;</button>
       </div>
-      <!-- Live Control Panel -->
+      <!-- Live状態表示（シンプル） -->
       <div id="livePanel">
-        <div class="live-title"><span class="dot" id="liveDot"></span>Live Mode &#x2014; Claude Code CLI</div>
-        <div class="live-row">
-          <input type="text" id="liveProjectDir" placeholder="プロジェクトパス (例: /tmp/MyApp)">
-          <button id="btnLiveConnect">接続</button>
-          <button id="btnLiveDisconnect" class="danger" style="display:none">中断</button>
-        </div>
-        <div class="live-status" id="liveStatus">未接続</div>
+        <div class="live-title"><span class="dot" id="liveDot"></span><span id="liveStatus">未接続</span></div>
       </div>
     </div>
   </main>
@@ -1794,24 +1788,10 @@ function handleServerMessage(msg) {
 function updateLiveStatus(status, text) {
   const dot = document.getElementById('liveDot');
   const label = document.getElementById('liveStatus');
-  const btnConnect = document.getElementById('btnLiveConnect');
-  const btnDisconnect = document.getElementById('btnLiveDisconnect');
-
   if (label) label.textContent = text;
-
   if (dot) {
     dot.className = 'dot';
     if (status === 'connected') dot.classList.add('connected');
-  }
-
-  if (btnConnect && btnDisconnect) {
-    if (status === 'connected') {
-      btnConnect.style.display = 'none';
-      btnDisconnect.style.display = '';
-    } else {
-      btnConnect.style.display = '';
-      btnDisconnect.style.display = 'none';
-    }
   }
 }
 
@@ -1975,6 +1955,22 @@ function init() {
 
   // Liveモードボタン
   document.getElementById('btnLive').addEventListener('click', () => {
+    // 既にLive接続中ならOFF
+    if (CONNECTION_MODE === 'websocket') {
+      disconnectWebSocket();
+      CONNECTION_MODE = 'simulation';
+      state.mode = 'manual';
+      document.getElementById('btnLive').classList.remove('active');
+      document.getElementById('btnManual').classList.add('active');
+      document.getElementById('livePanel').classList.remove('visible');
+      addLog('boss', '\u{1F4E1} Liveモードを終了しました');
+      AGENT_DEFS.forEach(a => { state.agents[a.id].active = true; });
+      updateUI();
+      return;
+    }
+    // パスを聞いて即接続
+    const dir = prompt('プロジェクトのフォルダパスを入力してください\n例: /tmp/MyApp');
+    if (!dir || !dir.trim()) return;
     document.getElementById('btnLive').classList.add('active');
     document.getElementById('btnDemo').classList.remove('active');
     document.getElementById('btnManual').classList.remove('active');
@@ -1982,15 +1978,14 @@ function init() {
     CONNECTION_MODE = 'websocket';
     state.mode = 'live';
     state.running = false;
-    // Liveコントロールパネル表示
     document.getElementById('livePanel').classList.add('visible');
-    addLog('boss', '\u{1F4E1} Liveモードに切り替えました');
-    // 全エージェントをスタンバイ
+    addLog('boss', '\u{1F4E1} Live接続中...');
     AGENT_DEFS.forEach(a => { state.agents[a.id].active = false; state.agents[a.id].working = false; });
     updateUI();
+    connectWebSocket(dir.trim());
   });
 
-  // デモ/手動ボタンでLiveパネル非表示
+  // デモ/手動ボタンでLive切断
   const hideLivePanel = () => {
     document.getElementById('livePanel').classList.remove('visible');
     document.getElementById('btnLive').classList.remove('active');
@@ -1999,22 +1994,6 @@ function init() {
       CONNECTION_MODE = 'simulation';
     }
   };
-
-  // Live接続ボタン
-  document.getElementById('btnLiveConnect').addEventListener('click', () => {
-    const dir = document.getElementById('liveProjectDir').value.trim();
-    if (!dir) { alert('プロジェクトパスを入力してください'); return; }
-    connectWebSocket(dir);
-  });
-  document.getElementById('btnLiveDisconnect').addEventListener('click', () => {
-    disconnectWebSocket();
-  });
-  // Enter で接続
-  document.getElementById('liveProjectDir').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      document.getElementById('btnLiveConnect').click();
-    }
-  });
 
   // ズームボタン
   document.getElementById('btnZoomIn').addEventListener('click', () => {
