@@ -20,8 +20,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
   padding:0 16px;background:var(--panel);border-bottom:1px solid var(--border);z-index:10}
 #header .logo{font-size:16px;font-weight:700;white-space:nowrap}
 #header .logo span{color:var(--accent)}
-#header .phase-display{font-size:13px;font-weight:600;color:var(--accent);
-  background:#c8973e18;padding:4px 14px;border-radius:20px;border:1px solid var(--border)}
 #header .right{display:flex;align-items:center;gap:12px}
 .status-pill{display:flex;align-items:center;gap:6px;font-size:12px;
   padding:4px 10px;border-radius:12px;background:#ffffff10}
@@ -141,15 +139,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 #controls button:hover{background:#ffffff10}
 #controls button.active{background:var(--accent);color:#1a1520;border-color:var(--accent)}
 
-/* ===== PHASE OVERLAY ===== */
-#phaseOverlay{position:absolute;top:0;left:0;right:0;bottom:0;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  background:rgba(26,21,32,.85);z-index:20;pointer-events:none;
-  opacity:0;transition:opacity .3s}
-#phaseOverlay.visible{opacity:1}
-#phaseOverlay .phase-num{font-size:60px;font-weight:700;color:var(--accent);
-  font-family:'JetBrains Mono',monospace}
-#phaseOverlay .phase-name{font-size:22px;font-weight:700;margin-top:8px}
 
 /* ===== LIVE CONTROL PANEL ===== */
 #livePanel{display:none;padding:8px 12px;background:#0d0a12;border-top:1px solid var(--border)}
@@ -183,7 +172,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
   <!-- ===== HEADER ===== -->
   <header id="header">
     <div class="logo">&#x1F9EA; <span>Code-Lab</span> &#x2605; 司令室</div>
-    <div class="phase-display" id="phaseText">Phase 1: 設計</div>
     <div class="right">
       <div class="status-pill"><div class="status-dot" id="statusDot"></div><span id="statusLabel">指示待ち</span></div>
       <div id="clock">00:00:00</div>
@@ -198,9 +186,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
         <div class="stat-item"><span class="icon">&#x270F;&#xFE0F;</span><span class="val" id="statLines">0</span></div>
         <div class="stat-item"><span class="icon">&#x1F9EA;</span><span class="val" id="statTests">0</span></div>
         <div class="stat-item"><span class="icon">&#x1F41B;</span><span class="val" id="statBugs">0</span></div>
-        <div class="stat-item"><span class="icon">&#x1F504;</span><span class="val" id="statPhase">1/6</span></div>
       </div>
-      <div id="phaseOverlay"><div class="phase-num"></div><div class="phase-name"></div></div>
       <div id="commandBar">
         <div class="label">社長&#x25B8;</div>
         <button id="btnAttach" title="ファイル添付">＋</button>
@@ -279,15 +265,6 @@ const AGENT_DEFS = [
   {id:'security',  name:'セキュリティ', role:'秘密鍵・個人情報・公開安全性チェック', color:'#e84855', shirt:'#8b0000', emoji:'🛡️'}
 ];
 
-const PHASE_ACTIVE = {
-  1:['lead'],
-  2:['lead','developer','ui-designer'],
-  3:['tester','reviewer'],
-  4:['debugger','developer'],
-  5:['tester','qa','security'],
-  6:['lead','developer','security']
-};
-const PHASE_NAMES = {1:'設計',2:'実装',3:'レビュー',4:'バグ修正',5:'最終QA',6:'デプロイ'};
 
 // Agent grid positions (x, y) in office grid
 const AGENT_POS = {
@@ -308,7 +285,6 @@ const BOSS_POS = {gx:8, gy:8.5};
 const state = {
   mode:'demo', // 'demo' or 'live'
   speed:1,
-  phase:1,
   running:false,
   stats:{files:0,lines:0,tests:0,bugs:0},
   agents:{},
@@ -317,7 +293,6 @@ const state = {
   logs:[],
   eventIndex:0,
   eventTimer:null,
-  phaseOverlayVisible:false,
   time:0 // elapsed ms
 };
 
@@ -404,14 +379,8 @@ function renderFilePreview() {
   });
 }
 
-// DevEvent interface (Phase 2 compatible)
+// DevEvent interface
 function processDevEvent(ev) {
-  // Update phase
-  if (ev.phase && ev.phase !== state.phase) {
-    showPhaseOverlay(ev.phase);
-    state.phase = ev.phase;
-    updateActiveAgents();
-  }
   // Update agent
   if (ev.a || ev.agent) {
     const aid = ev.a || ev.agent;
@@ -1197,20 +1166,6 @@ function drawFloatingEmojis() {
   c.globalAlpha = 1;
 }
 
-function showPhaseOverlay(phase) {
-  // 開始（Phase 1）と完了（Phase 6）のみオーバーレイ表示
-  if (phase !== 1 && phase !== 6) return;
-  const overlay = document.getElementById('phaseOverlay');
-  if (phase === 6) {
-    overlay.querySelector('.phase-num').textContent = '🎊 完了';
-    overlay.querySelector('.phase-name').textContent = '開発が完了しました';
-  } else {
-    overlay.querySelector('.phase-num').textContent = '開発開始';
-    overlay.querySelector('.phase-name').textContent = 'プロジェクトを開始します';
-  }
-  overlay.classList.add('visible');
-  setTimeout(() => overlay.classList.remove('visible'), 2500);
-}
 
 function spawnCelebration() {
   // Confetti for all agents
@@ -1363,10 +1318,6 @@ function updateUI() {
   document.getElementById('statLines').textContent = state.stats.lines;
   document.getElementById('statTests').textContent = state.stats.tests;
   document.getElementById('statBugs').textContent = state.stats.bugs;
-  document.getElementById('statPhase').textContent = state.phase + '/6';
-
-  // Phase display
-  document.getElementById('phaseText').textContent = 'Phase ' + state.phase + ': ' + (PHASE_NAMES[state.phase] || '');
 
   // Status
   const anyWorking = Object.values(state.agents).some(a => a.working);
@@ -1512,23 +1463,6 @@ function updateClock() {
     [now.getHours(), now.getMinutes(), now.getSeconds()].map(v => String(v).padStart(2, '0')).join(':');
 }
 
-function updateActiveAgents() {
-  const activeIds = PHASE_ACTIVE[state.phase] || [];
-  AGENT_DEFS.forEach(agentDef => {
-    const ag = state.agents[agentDef.id];
-    const wasActive = ag.active;
-    ag.active = activeIds.includes(agentDef.id);
-    if (ag.active && !wasActive) {
-      ag._justActivated = true;
-      ag._activatedTime = state.time;
-    }
-    if (!ag.active) {
-      ag.working = false;
-      ag.action = '';
-      ag.thought = '';
-    }
-  });
-}
 
 // ============================================================
 // SECTION: SIMULATION (Demo Events)
@@ -1644,7 +1578,6 @@ function startDemo() {
   state.mode = 'demo';
   state.running = true;
   state.eventIndex = 0;
-  state.phase = 0;
   state.stats = {files: 0, lines: 0, tests: 0, bugs: 0};
   state.confirmQueue = [];
   AGENT_DEFS.forEach(a => {
@@ -1993,7 +1926,6 @@ function updateLiveStatus(status, text) {
 function init() {
   resizeCanvas();
   buildAgentCards();
-  updateActiveAgents();
   updateUI();
   updateClock();
 
