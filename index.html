@@ -1974,7 +1974,7 @@ function init() {
       return;
     }
     // パスを聞いて即接続
-    const dir = prompt('プロジェクトのフォルダパスを入力してください\n例: /tmp/MyApp');
+    const dir = prompt('プロジェクトのフォルダパスを入力してください\n（cdは不要。パスのみ入力）\n例: /Users/shigemotoyasunari/Code-Lab');
     if (!dir || !dir.trim()) return;
     document.getElementById('btnLive').classList.add('active');
     document.getElementById('btnDemo').classList.remove('active');
