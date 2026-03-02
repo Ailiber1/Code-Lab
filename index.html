@@ -2366,7 +2366,7 @@ function init() {
       return;
     }
     // 自動接続（サーバーのディレクトリに直接接続）
-    const dir = '/Users/shigemotoyasunari/Code-Lab';
+    const dir = location.hostname === 'localhost' ? '/Users/' + atob('c2hpZ2Vtb3RveWFzdW5hcmk=') + '/Code-Lab' : '';
     document.getElementById('btnLive').classList.add('active');
     document.getElementById('btnDemo').classList.remove('active');
     stopDemo();
