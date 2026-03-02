@@ -1713,58 +1713,61 @@ function stopDemo() {
 // SECTION: COMMAND PROCESSING (Interactive Demo)
 // ============================================================
 
-// 指示内容からエージェント連鎖シナリオを生成
+// 指示内容からエージェント連鎖シナリオを生成（全員参加型）
 function buildScenario(text) {
   const lower = text.toLowerCase();
   const steps = [];
+  const summary = text.slice(0, 20) + (text.length > 20 ? '…' : '');
 
-  // 1. リードが常に最初に受け取って分析
-  steps.push({a:'lead', t:'社長の指示を分析中: 「' + text.slice(0,20) + (text.length>20?'…':'') + '」',
-    th:'どのメンバーに割り振るか検討中…', e:'📋', d:2500, s:'files', n:1});
+  // Phase 1: リードが受け取って設計
+  steps.push({a:'lead', t:'社長の指示を分析中: 「' + summary + '」',
+    th:'どのメンバーに何を割り振るか検討中…', e:'📋', d:2500, s:'files', n:1});
+  steps.push({a:'lead', t:'アーキテクチャ設計・タスク分割中',
+    th:'全メンバーに作業を分配しよう', e:'📐', d:2500, s:'files', n:2});
 
-  // 2. キーワードに応じてメイン担当が動く
-  if (lower.match(/実装|コード|ビルド|作成|追加|機能|開発/)) {
-    steps.push({a:'developer', t:'コード実装開始', th:'設計書を確認…最適な実装方法を選定中', e:'⌨️', d:3500, s:'lines', n:Math.floor(Math.random()*200+50)});
-    steps.push({a:'developer', t:'コード実装完了 → テスト依頼', th:'実装できた。テスターに回そう', e:'✅', d:2000});
-    steps.push({a:'tester', t:'実装内容の動作確認中', th:'エッジケースも網羅して確認するぞ', e:'🧪', d:3000, s:'tests', n:Math.floor(Math.random()*5+2)});
-  } else if (lower.match(/テスト|検証|動作確認/)) {
-    steps.push({a:'tester', t:'テストケース作成・実行中', th:'全パターン網羅するぞ', e:'🧪', d:3500, s:'tests', n:Math.floor(Math.random()*8+3)});
-    steps.push({a:'tester', t:'テスト結果レポート作成', th:'結果をまとめてリードに報告', e:'📊', d:2500, s:'files', n:1});
-  } else if (lower.match(/バグ|修正|エラー|不具合|直し/)) {
-    steps.push({a:'debugger', t:'バグの原因を調査中', th:'ログを確認…再現手順を特定するぞ', e:'🔍', d:3000, s:'files', n:2});
-    steps.push({a:'debugger', t:'原因特定 → 修正パッチ作成', th:'原因わかった！ここを直せば解決する', e:'🐛', d:3500, s:'bugs', n:1});
-    steps.push({a:'developer', t:'修正パッチを適用中', th:'デバッガーの指示通りに修正', e:'🔧', d:2500, s:'lines', n:Math.floor(Math.random()*30+10)});
-    steps.push({a:'tester', t:'修正後の回帰テスト', th:'修正で他が壊れてないか確認', e:'🧪', d:2500, s:'tests', n:3});
-  } else if (lower.match(/レビュー|品質|チェック|確認/)) {
-    steps.push({a:'reviewer', t:'コードレビュー開始', th:'設計パターンと命名規則を確認中', e:'👀', d:3500, s:'files', n:3});
-    steps.push({a:'reviewer', t:'レビュー完了 → 改善提案あり', th:'リファクタリングの余地がある…提案書を作ろう', e:'📝', d:2500, s:'files', n:1});
-  } else if (lower.match(/ui|デザイン|スタイル|画面|レイアウト|見た目|色/)) {
-    steps.push({a:'ui-designer', t:'UIデザイン検討中', th:'ユーザー体験を最優先で設計しよう', e:'🎨', d:3000, s:'files', n:1});
-    steps.push({a:'ui-designer', t:'スタイリング実装中', th:'カラーパレットとタイポグラフィを統一', e:'🖌️', d:3500, s:'lines', n:Math.floor(Math.random()*100+30)});
-    steps.push({a:'developer', t:'UI変更をコードに統合', th:'デザイナーの指示通りに反映', e:'⌨️', d:2500, s:'lines', n:Math.floor(Math.random()*50+20)});
-  } else if (lower.match(/セキュリティ|安全|脆弱|漏洩|秘密鍵|個人情報/)) {
-    steps.push({a:'security', t:'セキュリティスキャン開始', th:'.envと.gitignoreの整合性を確認…', e:'🛡️', d:3000, s:'files', n:2});
-    steps.push({a:'security', t:'脆弱性チェック・npm audit実行', th:'依存パッケージの脆弱性を精査中', e:'🔐', d:3500, s:'tests', n:2});
-    steps.push({a:'security', t:'監査レポート作成完了', th:'問題なし！安全に公開できる', e:'✅', d:2500, s:'files', n:1});
-  } else if (lower.match(/デプロイ|公開|リリース|push|アップ/)) {
-    steps.push({a:'security', t:'デプロイ前セキュリティチェック', th:'公開前の最終確認…秘密鍵・個人情報なし', e:'🛡️', d:2500});
-    steps.push({a:'developer', t:'本番ビルド実行中', th:'最適化してバンドルサイズ最小化', e:'🏗️', d:3000, s:'files', n:1});
-    steps.push({a:'developer', t:'デプロイ実行中', th:'GitHub Pagesにデプロイ中…', e:'🚀', d:3500});
-    steps.push({a:'lead', t:'デプロイ完了確認', th:'本番環境で動作確認OK！', e:'✅', d:2500});
-  } else if (lower.match(/qa|品質保証|最終/)) {
-    steps.push({a:'qa', t:'最終品質チェック開始', th:'全機能を総点検するぞ', e:'✅', d:3000, s:'tests', n:5});
-    steps.push({a:'security', t:'公開安全性チェック', th:'リポジトリの公開状態を確認中', e:'🔐', d:2500});
-    steps.push({a:'qa', t:'品質レポート完成', th:'品質基準クリア！', e:'📊', d:2500, s:'files', n:1});
-  } else {
-    // 汎用: リードが分析→開発者が対応
-    steps.push({a:'lead', t:'タスクを整理・分割中', th:'最適なアプローチを検討…', e:'📐', d:2500, s:'files', n:1});
-    steps.push({a:'developer', t:'対応を実施中', th:'社長の要望に沿って作業中', e:'⌨️', d:3500, s:'lines', n:Math.floor(Math.random()*100+30)});
-    steps.push({a:'tester', t:'対応結果を検証中', th:'問題なく動作するか確認', e:'🧪', d:2500, s:'tests', n:2});
-  }
+  // Phase 2: UIデザイナーがデザイン
+  steps.push({a:'ui-designer', t:'UI/UXデザイン設計中',
+    th:'ユーザー体験を最優先で画面構成を設計', e:'🎨', d:3000, s:'files', n:1});
+  steps.push({a:'ui-designer', t:'スタイリング・レイアウト実装中',
+    th:'カラーパレットとタイポグラフィを統一', e:'🖌️', d:3000, s:'lines', n:Math.floor(Math.random()*100+30)});
 
-  // 最後: リードが完了報告
-  steps.push({a:'lead', t:'社長に完了報告: 「' + text.slice(0,15) + (text.length>15?'…':'') + '」対応完了',
-    th:'全工程完了。次の指示をお待ちしています', e:'📋', d:2000});
+  // Phase 2: デベロッパーがコア実装
+  steps.push({a:'developer', t:'コア機能の実装開始',
+    th:'設計書に沿って最適な実装を選定中', e:'⌨️', d:3500, s:'lines', n:Math.floor(Math.random()*200+80)});
+  steps.push({a:'developer', t:'機能実装完了 → レビュー依頼',
+    th:'実装できた。レビュアーに回そう', e:'✅', d:2000, s:'files', n:1});
+
+  // Phase 3: レビュアーがコードレビュー
+  steps.push({a:'reviewer', t:'コードレビュー開始',
+    th:'設計パターン・命名規則・可読性を確認中', e:'👀', d:3000, s:'files', n:3});
+  steps.push({a:'reviewer', t:'レビュー完了 → 改善点をフィードバック',
+    th:'いくつか改善点あり…開発者に戻そう', e:'📝', d:2500, s:'files', n:1});
+
+  // Phase 3: テスターがテスト
+  steps.push({a:'tester', t:'テストケース作成・実行中',
+    th:'正常系・異常系・エッジケースを網羅するぞ', e:'🧪', d:3500, s:'tests', n:Math.floor(Math.random()*8+5)});
+
+  // Phase 4: デバッガーが問題を検出・修正
+  steps.push({a:'debugger', t:'テスト結果を分析・バグ調査中',
+    th:'テスターのレポートからバグの原因を特定する', e:'🔍', d:3000, s:'bugs', n:Math.floor(Math.random()*2+1)});
+  steps.push({a:'developer', t:'バグ修正パッチを適用中',
+    th:'デバッガーの指摘箇所を修正', e:'🔧', d:2500, s:'lines', n:Math.floor(Math.random()*30+10)});
+
+  // Phase 5: セキュリティが監査
+  steps.push({a:'security', t:'セキュリティ監査: 秘密鍵・個人情報チェック',
+    th:'.envの露出なし、コミット履歴にAPIキーなし…', e:'🛡️', d:3000, s:'files', n:2});
+  steps.push({a:'security', t:'脆弱性スキャン・公開安全性チェック',
+    th:'XSS対策OK、Firebase DBルールOK', e:'🔐', d:2500, s:'tests', n:2});
+
+  // Phase 5: QAが最終品質保証
+  steps.push({a:'qa', t:'最終品質チェック: 全機能総点検',
+    th:'全ブラウザ・全デバイスで動作確認', e:'✅', d:3000, s:'tests', n:Math.floor(Math.random()*5+3)});
+  steps.push({a:'qa', t:'品質レポート作成完了',
+    th:'品質基準クリア！自信を持って公開できる', e:'📊', d:2500, s:'files', n:1});
+
+  // Phase 6: リードが完了報告
+  steps.push({a:'lead', t:'全工程完了！社長に報告: 「' + summary + '」対応完了',
+    th:'全メンバーの作業が完了。次の指示をお待ちしています', e:'🎉', d:2000});
 
   return steps;
 }
