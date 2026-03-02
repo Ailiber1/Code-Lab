@@ -264,13 +264,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
         <div class="section-title">作業ログ</div>
         <div id="logPanel"></div>
       </div>
-      <!-- Controls (デモ専用) -->
-      <div id="controls" style="display:none">
+      <!-- Controls -->
+      <div id="controls">
         <button id="btnDemo" class="active">&#x25B6; デモ</button>
-        <button id="btnLive" style="display:none">&#x1F4E1; Live</button>
+        <button id="btnLive">&#x1F4E1; Live</button>
       </div>
-      <!-- Live状態表示（非表示） -->
-      <div id="livePanel" style="display:none!important">
+      <!-- Live状態表示（シンプル） -->
+      <div id="livePanel">
         <div class="live-title"><span class="dot" id="liveDot"></span><span id="liveStatus">未接続</span></div>
       </div>
     </div>
@@ -2241,6 +2241,13 @@ function updateLiveStatus(status, text) {
 // SECTION: INIT
 // ============================================================
 function init() {
+  // GitHub Pages等（localhost以外）ではLiveモードを非表示
+  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (!isLocal) {
+    document.getElementById('controls').style.display = 'none';
+    document.getElementById('livePanel').style.display = 'none';
+  }
+
   resizeCanvas();
   buildAgentCards();
   updateUI();
