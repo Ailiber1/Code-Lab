@@ -273,7 +273,8 @@ const AGENT_DEFS = [
   {id:'debugger',  name:'デバッガー',   role:'エラー調査・修正',   color:'#e06878', shirt:'#c0392b', emoji:'🔍'},
   {id:'reviewer',  name:'レビュアー',   role:'コード品質・設計レビュー', color:'#9b8ec4', shirt:'#c8a832', emoji:'👀'},
   {id:'ui-designer',name:'UIデザイナー',role:'UI/UX・スタイリング',color:'#e88ec4', shirt:'#d4729a', emoji:'🎨'},
-  {id:'qa',        name:'QA',           role:'最終品質保証',       color:'#7ec88e', shirt:'#27ae60', emoji:'✅'}
+  {id:'qa',        name:'QA',           role:'最終品質保証',       color:'#7ec88e', shirt:'#27ae60', emoji:'✅'},
+  {id:'security',  name:'セキュリティ', role:'秘密鍵・個人情報・公開安全性チェック', color:'#e84855', shirt:'#8b0000', emoji:'🛡️'}
 ];
 
 const PHASE_ACTIVE = {
@@ -281,8 +282,8 @@ const PHASE_ACTIVE = {
   2:['lead','developer','ui-designer'],
   3:['tester','reviewer'],
   4:['debugger','developer'],
-  5:['tester','qa'],
-  6:['lead','developer']
+  5:['tester','qa','security'],
+  6:['lead','developer','security']
 };
 const PHASE_NAMES = {1:'設計',2:'実装',3:'レビュー',4:'バグ修正',5:'最終QA',6:'デプロイ'};
 
@@ -294,7 +295,8 @@ const AGENT_POS = {
   'reviewer':   {gx:9,  gy:2.5},
   'tester':     {gx:2,  gy:5.5},
   'debugger':   {gx:4.2,gy:5.5},
-  'qa':         {gx:6.8,gy:5.5}
+  'qa':         {gx:6.8,gy:5.5},
+  'security':   {gx:9,  gy:5.5}
 };
 const BOSS_POS = {gx:8, gy:8.5};
 
@@ -1580,25 +1582,35 @@ const DEMO_EVENTS = [
   {phase:4,a:'developer',t:'全修正パッチ適用完了',d:3000,e:'✅',s:'bugs',n:-2,
    th:'バイオハザード レクイエムの安定性を目指す'},
 
-  // Phase 5: 最終QA (tester, qa)
+  // Phase 5: 最終QA (tester, qa, security)
   {phase:5,a:'tester',t:'総合テスト開始: 全機能検証',d:4000,e:'🧪',s:'tests',n:10,
    th:'全ブラウザで動作確認するぞ'},
-  {phase:5,a:'qa',t:'セキュリティ監査開始',d:3500,e:'🔒',
-   th:'XSS対策は問題なし。入力サニタイズ確認完了'},
+  {phase:5,a:'security',t:'セキュリティ監査開始: .env・秘密鍵の露出チェック',d:3500,e:'🛡️',
+   th:'.envファイルが.gitignoreに入ってるか確認…'},
+  {phase:5,a:'security',t:'GitHubリポジトリ公開安全性チェック',d:3500,e:'🔐',s:'files',n:1,
+   th:'コミット履歴にAPIキーやパスワードが残ってないか精査中…'},
   {phase:5,a:'tester',t:'クロスブラウザテスト完了',d:3000,e:'🌐',s:'tests',n:5,
    th:'Safari対応が一番厄介だった…'},
+  {phase:5,a:'security',t:'XSS・インジェクション脆弱性スキャン',d:3000,e:'🛡️',s:'tests',n:3,
+   th:'innerHTML直書き箇所を全検索…escapeHTML通してるか確認'},
   {phase:5,a:'qa',t:'アクセシビリティチェック完了',d:3000,e:'♿',s:'tests',n:3,
    th:'WAI-ARIA対応も完璧だ'},
+  {phase:5,a:'security',t:'Firebase DBルール検証: 不正アクセス防止確認',d:3000,e:'🔒',
+   th:'ルートレベルの.read:true禁止…パス単位でルール書いてるかチェック'},
   {phase:5,a:'qa',t:'最終品質レポート作成',d:3500,e:'📊',s:'files',n:1,
    th:'品質基準クリア！自信を持ってデプロイできる'},
-  {phase:5,a:'qa',t:'社長にデプロイ準備完了を報告',d:2000,e:'📩',
-   confirm:{msg:'デプロイ準備完了。GitHub Pagesにデプロイしてよいですか？'}},
+  {phase:5,a:'security',t:'社長にセキュリティ監査結果を報告',d:2000,e:'📩',
+   confirm:{msg:'セキュリティ監査完了。秘密鍵・個人情報の漏洩なし。公開して問題ありません'}},
 
-  // Phase 6: デプロイ (lead, developer)
+  // Phase 6: デプロイ (lead, developer, security)
   {phase:6,a:'developer',t:'本番ビルド実行中',d:3000,e:'🏗️',s:'files',n:1,
    th:'最適化完了…バンドルサイズ最小化'},
+  {phase:6,a:'security',t:'デプロイ前最終チェック: npm audit実行',d:3000,e:'🛡️',
+   th:'npm audit clean！脆弱性なし'},
   {phase:6,a:'developer',t:'GitHub Pagesへデプロイ中',d:4000,e:'🚀',
    th:'デプロイスクリプト実行中…'},
+  {phase:6,a:'security',t:'公開URL確認: 意図しないファイル公開がないかチェック',d:3000,e:'🔐',
+   th:'.envやnode_modulesが公開されてないか最終確認…OK！'},
   {phase:6,a:'lead',t:'デプロイ完了確認: 本番環境テスト',d:3000,e:'✅',
    th:'本番環境で動作確認OK！'},
   {phase:6,a:'lead',t:'全工程完了！ゲームギャラリーの新作として公開！',d:3000,e:'🎉',

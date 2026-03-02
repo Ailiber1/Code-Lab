@@ -328,16 +328,24 @@ function detectAgent(toolName, content) {
   if (t === 'bash' && content && /\b(test|jest|vitest|mocha|pytest|npm\s+test)\b/i.test(content)) return 'tester';
   // リント・レビュー系
   if (t === 'bash' && content && /\b(lint|eslint|prettier|format)\b/i.test(content)) return 'reviewer';
-  // セキュリティ・QA系
-  if (t === 'bash' && content && /\b(audit|security|vulnerab)\b/i.test(content)) return 'qa';
+  // セキュリティチェック系
+  if (t === 'bash' && content && /\b(audit|security|vulnerab|secret|leak|credential|\.env|\.gitignore|api.key|private.key|token)\b/i.test(content)) return 'security';
+  // QA系
+  if (t === 'bash' && content && /\b(quality|coverage)\b/i.test(content)) return 'qa';
   // ビルド・デプロイ系
   if (t === 'bash' && content && /\b(build|deploy|push|npm\s+run)\b/i.test(content)) return 'developer';
 
   // ツール名ベース
-  if (['read', 'grep', 'glob', 'list', 'search'].some(k => t.includes(k))) return 'lead';
+  if (['read', 'grep', 'glob', 'list', 'search'].some(k => t.includes(k))) {
+    // セキュリティ関連ファイルならsecurity
+    if (content && /\b(\.env|\.gitignore|secret|credential|key|token|auth|security|rules\.json|firestore\.rules)\b/i.test(content)) return 'security';
+    return 'lead';
+  }
   if (['edit', 'write', 'notebookedit'].some(k => t.includes(k))) {
     // UI系ファイルならui-designer
     if (content && /\.(css|scss|html|svg|style)/i.test(content)) return 'ui-designer';
+    // セキュリティ関連ファイルならsecurity
+    if (content && /\b(\.gitignore|rules\.json|firestore\.rules|\.env)\b/i.test(content)) return 'security';
     return 'developer';
   }
   if (t === 'bash') return 'developer';
