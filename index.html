@@ -88,6 +88,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 .agent-card{display:flex;align-items:flex-start;gap:8px;padding:8px;
   border-radius:8px;margin-bottom:4px;transition:all .3s}
 .agent-card.active{background:var(--card-active)}
+.agent-card.working{background:var(--card-active);
+  box-shadow:0 0 12px var(--agent-color),inset 0 0 8px var(--agent-color);
+  animation:agentGlow 1.5s ease-in-out infinite}
+@keyframes agentGlow{0%,100%{box-shadow:0 0 8px var(--agent-color),inset 0 0 4px var(--agent-color)}
+  50%{box-shadow:0 0 18px var(--agent-color),inset 0 0 10px var(--agent-color)}}
 .agent-card.inactive{background:var(--card-inactive);opacity:.5}
 .agent-avatar{width:32px;height:32px;border-radius:50%;display:flex;
   align-items:center;justify-content:center;font-size:16px;flex-shrink:0;
@@ -170,6 +175,35 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 #livePanel button.danger:hover{background:#e0687825}
 #livePanel .live-status{font-size:11px;color:#ffffff50;margin-top:2px}
 
+/* ===== OUTPUT MODAL (ファイル上書き防止) ===== */
+#outputModal{position:fixed;top:0;left:0;right:0;bottom:0;
+  background:rgba(0,0,0,.7);z-index:100;display:none;
+  align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+#outputModal.visible{display:flex}
+#outputModal .modal-box{background:var(--panel);border:1px solid var(--accent);
+  border-radius:12px;padding:24px;width:420px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+#outputModal .modal-title{font-size:16px;font-weight:700;color:#e06878;margin-bottom:12px;
+  display:flex;align-items:center;gap:8px}
+#outputModal .modal-dir{font-size:12px;color:#ffffff80;margin-bottom:16px;
+  padding:8px 12px;background:#ffffff08;border-radius:6px;
+  font-family:'JetBrains Mono',monospace;word-break:break-all}
+#outputModal .modal-dir strong{color:var(--accent)}
+#outputModal .modal-btns{display:flex;gap:8px;margin-bottom:12px}
+#outputModal .modal-btns button{flex:1;padding:8px 12px;border:none;border-radius:8px;
+  font-size:13px;font-weight:600;cursor:pointer;transition:filter .15s}
+#outputModal .modal-btns button:hover{filter:brightness(1.2)}
+#outputModal .btn-proceed{background:#5cc87830;color:#5cc878;border:1px solid #5cc87840!important}
+#outputModal .btn-specify{background:#38b2c930;color:#38b2c9;border:1px solid #38b2c940!important}
+#outputModal .btn-cancel{background:#e0687830;color:#e06878;border:1px solid #e0687840!important}
+#outputModal .path-input-row{display:none;gap:8px;align-items:center;margin-top:8px}
+#outputModal .path-input-row.show{display:flex}
+#outputModal .path-input-row input{flex:1;background:#ffffff08;border:1px solid var(--border);
+  border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;
+  font-family:'JetBrains Mono',monospace;outline:none}
+#outputModal .path-input-row input:focus{border-color:var(--accent)}
+#outputModal .path-input-row button{padding:6px 14px;background:var(--accent);color:#1a1520;
+  border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer}
+
 /* ===== RESPONSIVE ===== */
 @media(max-width:800px){
   #main{grid-template-columns:1fr}
@@ -241,6 +275,23 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
       </div>
     </div>
   </main>
+</div>
+
+<!-- ===== OUTPUT MODAL (ファイル上書き防止) ===== -->
+<div id="outputModal">
+  <div class="modal-box">
+    <div class="modal-title">&#x26A0;&#xFE0F; ファイル作成の指示を検出しました</div>
+    <div class="modal-dir">現在の出力先: <strong id="modalCurrentDir">未接続</strong></div>
+    <div class="modal-btns">
+      <button class="btn-proceed" id="modalProceed">このまま実行</button>
+      <button class="btn-specify" id="modalSpecify">出力先を指定</button>
+      <button class="btn-cancel" id="modalCancel">キャンセル</button>
+    </div>
+    <div class="path-input-row" id="modalPathRow">
+      <input type="text" id="modalPathInput" placeholder="/path/to/output">
+      <button id="modalPathConfirm">決定</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -327,6 +378,7 @@ let liveConnected = false;
 let pendingFiles = []; // 添付ファイル一時保管
 
 let liveCommandRunning = false;
+let liveProjectDir = ''; // 接続中のプロジェクトパス
 
 function setLiveRunning(running) {
   liveCommandRunning = running;
@@ -346,25 +398,60 @@ function setLiveRunning(running) {
   }
 }
 
+// ファイル作成キーワード検出パターン（幅広くカバー）
+const CREATE_KEYWORD_RE = /作って|作成|生成|新しい|作る|作り|つくって|つくる|書いて|開発して|実装して|構築|ページ|サイト|アプリ|ゲーム|create|generate|build|make|develop|implement/i;
+let _pendingSendText = null; // モーダル表示中の保留テキスト
+
 function sendCommand(text) {
   if (CONNECTION_MODE === 'websocket' && ws && ws.readyState === WebSocket.OPEN) {
     if (liveCommandRunning) {
       addLog('boss', '\u26A0\uFE0F 前のコマンドが実行中です');
       return;
     }
-    const filesLabel = pendingFiles.length ? ' [+' + pendingFiles.length + 'ファイル]' : '';
-    addLog('boss', '\u{1F4E2} ' + text + filesLabel);
-    const payload = { type: 'command', text };
-    if (pendingFiles.length) {
-      payload.files = pendingFiles.map(f => ({ name: f.name, type: f.type, data: f.data }));
+    // 第1層: ファイル作成キーワード検出 → モーダル表示（開発開始より先）
+    if (CREATE_KEYWORD_RE.test(text)) {
+      _pendingSendText = text;
+      showOutputModal();
+      return;
     }
-    ws.send(JSON.stringify(payload));
-    setLiveRunning(true);
-    clearPendingFiles();
+    _doSendCommand(text);
   } else {
     simulateResponse(text);
     clearPendingFiles();
   }
+}
+
+function _doSendCommand(text) {
+  const filesLabel = pendingFiles.length ? ' [+' + pendingFiles.length + '\u30D5\u30A1\u30A4\u30EB]' : '';
+  addLog('boss', '\u{1F4E2} ' + text + filesLabel);
+  // 開発開始オーバーレイ（デモと同様）
+  showStatusOverlay('\u{1F680} 開発開始', '\u300C' + text.slice(0, 25) + (text.length > 25 ? '\u2026' : '') + '\u300D', 2500);
+  const payload = { type: 'command', text };
+  if (pendingFiles.length) {
+    payload.files = pendingFiles.map(f => ({ name: f.name, type: f.type, data: f.data }));
+  }
+  ws.send(JSON.stringify(payload));
+  setLiveRunning(true);
+  clearPendingFiles();
+}
+
+// --- 出力先確認モーダル ---
+function showOutputModal() {
+  const modal = document.getElementById('outputModal');
+  const dirLabel = document.getElementById('modalCurrentDir');
+  const pathRow = document.getElementById('modalPathRow');
+  const pathInput = document.getElementById('modalPathInput');
+  // 現在の出力先を表示（/Users/ユーザー名/ を ~/に置換して個人名を隠す）
+  const displayDir = liveProjectDir ? liveProjectDir.replace(/^\/Users\/[^/]+\//, '~/') : '不明';
+  dirLabel.textContent = liveConnected ? displayDir : '未接続';
+  pathRow.classList.remove('show');
+  pathInput.value = '';
+  modal.classList.add('visible');
+}
+
+function hideOutputModal() {
+  document.getElementById('outputModal').classList.remove('visible');
+  document.getElementById('modalPathRow').classList.remove('show');
 }
 
 function clearPendingFiles() {
@@ -1402,7 +1489,7 @@ function updateAgentCards() {
     const ag = state.agents[agentDef.id];
     const card = document.getElementById('card-' + agentDef.id);
     if (!card) return;
-    card.className = 'agent-card ' + (ag.active ? 'active' : 'inactive');
+    card.className = 'agent-card ' + (ag.working ? 'active working' : (ag.active ? 'active' : 'inactive'));
     const statusEl = document.getElementById('status-' + agentDef.id);
     if (statusEl) {
       statusEl.className = 'status-indicator ' + (ag.working ? 'working' : (ag.active ? 'waiting' : 'idle'));
@@ -1934,7 +2021,8 @@ function handleServerMessage(msg) {
   switch (msg.type) {
     case 'connected':
       liveConnected = true;
-      updateLiveStatus('connected', '\u2705 接続完了: ' + msg.projectDir);
+      liveProjectDir = msg.projectDir || '';
+      updateLiveStatus('connected', '\u2705 接続完了');
       addLog('boss', '\u{1F4E1} プロジェクトに接続: ' + msg.projectDir);
       // 全エージェントをスタンバイ状態に
       AGENT_DEFS.forEach(a => { state.agents[a.id].active = true; });
@@ -1961,6 +2049,10 @@ function handleServerMessage(msg) {
         });
         updateUI();
       }, 1500);
+      break;
+
+    case 'file_backup':
+      addLog('security', '\u{1F6E1}\uFE0F バックアップ作成: ' + (msg.original ? msg.original.split('/').pop() : ''));
       break;
 
     case 'error':
@@ -2034,6 +2126,49 @@ function init() {
     e.preventDefault();
     commandBar.style.borderColor = '';
     Array.from(e.dataTransfer.files).forEach(f => addPendingFile(f));
+  });
+
+  // 出力先確認モーダル イベント
+  document.getElementById('modalProceed').addEventListener('click', () => {
+    hideOutputModal();
+    if (_pendingSendText) {
+      _doSendCommand(_pendingSendText);
+      _pendingSendText = null;
+    }
+  });
+  document.getElementById('modalSpecify').addEventListener('click', () => {
+    document.getElementById('modalPathRow').classList.add('show');
+    document.getElementById('modalPathInput').focus();
+  });
+  document.getElementById('modalCancel').addEventListener('click', () => {
+    hideOutputModal();
+    // テキストを入力欄に戻す
+    if (_pendingSendText) {
+      document.getElementById('cmdInput').value = _pendingSendText;
+      _pendingSendText = null;
+    }
+  });
+  document.getElementById('modalPathConfirm').addEventListener('click', () => {
+    const specifiedPath = document.getElementById('modalPathInput').value.trim();
+    if (!specifiedPath) return;
+    hideOutputModal();
+    if (_pendingSendText) {
+      const safeText = _pendingSendText + '\n\n' + specifiedPath + '\u306B\u51FA\u529B\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u65E2\u5B58\u30D5\u30A1\u30A4\u30EB\u3092\u4E0A\u66F8\u304D\u3057\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002';
+      _doSendCommand(safeText);
+      _pendingSendText = null;
+    }
+  });
+  document.getElementById('modalPathInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('modalPathConfirm').click();
+    }
+  });
+  // モーダル背景クリックでキャンセル
+  document.getElementById('outputModal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      document.getElementById('modalCancel').click();
+    }
   });
 
   // Controls
