@@ -403,32 +403,26 @@ function resizeCanvas() {
   canvas.width = area.clientWidth;
   canvas.height = Math.max(300, area.clientHeight - cmdH);
 
-  // グリッドのスクリーン上のサイズ（基準タイルサイズで計算）
-  const gridScreenW = (GRID_W + GRID_H) * BASE_TILE_W / 2; // 704
-  const gridScreenH = (GRID_W + GRID_H) * BASE_TILE_H / 2 + 3.2 * BASE_Z; // 448
+  // 矩形トップダウン: 壁の表示領域(上部15%) + 床領域(下部85%)
+  const WALL_RATIO = 0.15;
+  const wallH = canvas.height * WALL_RATIO;
+  const floorH = canvas.height - wallH;
 
-  // キャンバスをほぼ全面埋めるスケール計算（隙間を最小化）
-  const scaleX = (canvas.width * 0.98) / gridScreenW;
-  const scaleY = (canvas.height * 0.96) / gridScreenH;
-  const scale = Math.min(scaleX, scaleY);
+  // セルサイズ: キャンバスを隙間なく埋める（ズーム適用）
+  TILE_W = Math.round(canvas.width / GRID_W * zoomLevel);
+  TILE_H = Math.round(floorH / GRID_H * zoomLevel);
+  Z_SCALE = Math.round(wallH / 3.2 * zoomLevel);
 
-  // タイルサイズを動的に更新（ズーム適用）
-  const zoomedScale = scale * zoomLevel;
-  TILE_W = Math.round(BASE_TILE_W * zoomedScale);
-  TILE_H = Math.round(BASE_TILE_H * zoomedScale);
-  Z_SCALE = Math.round(BASE_Z * zoomedScale);
-
-  // オフセット: グリッドの中心をキャンバスの中心に合わせる（パン適用）
-  const centerIsoX = (GRID_W / 2 - GRID_H / 2) * TILE_W / 2;
-  const centerIsoY = (GRID_W / 2 + GRID_H / 2) * TILE_H / 2 - 0.6 * Z_SCALE;
-  OFFSET_X = canvas.width / 2 - centerIsoX + panOffX;
-  OFFSET_Y = canvas.height / 2 - centerIsoY + panOffY;
+  // オフセット: 床の左上を壁の真下に配置
+  OFFSET_X = Math.round((canvas.width - GRID_W * TILE_W) / 2) + panOffX;
+  OFFSET_Y = Math.round(wallH + (floorH - GRID_H * TILE_H) / 2) + panOffY;
 }
 
+// 矩形トップダウン座標変換（旧アイソメトリック → 矩形）
 function toIso(x, y, z) {
   return {
-    sx: (x - y) * TILE_W / 2 + OFFSET_X,
-    sy: (x + y) * TILE_H / 2 - (z || 0) * Z_SCALE + OFFSET_Y
+    sx: x * TILE_W + OFFSET_X,
+    sy: y * TILE_H - (z || 0) * Z_SCALE + OFFSET_Y
   };
 }
 
@@ -461,37 +455,31 @@ function darken(hex, amt) {
 // ============================================================
 // SECTION: ISOMETRIC DRAWING - PRIMITIVES
 // ============================================================
+// 矩形タイル描画（旧ダイヤモンド → 長方形）
 function drawDiamond(cx, cy, color) {
-  c.beginPath();
-  c.moveTo(cx, cy - TILE_H / 2);
-  c.lineTo(cx + TILE_W / 2, cy);
-  c.lineTo(cx, cy + TILE_H / 2);
-  c.lineTo(cx - TILE_W / 2, cy);
-  c.closePath();
   c.fillStyle = color;
-  c.fill();
+  c.fillRect(cx - TILE_W / 2, cy - TILE_H / 2, TILE_W, TILE_H);
 }
 
+// 矩形ボックス描画（上面 + 前面の2面で2.5D表現）
 function drawIsoBox(x, y, z, w, d, h, topC, frontC, rightC) {
-  const p1 = toIso(x, y, z + h);
-  const p2 = toIso(x + w, y, z + h);
-  const p3 = toIso(x + w, y + d, z + h);
-  const p4 = toIso(x, y + d, z + h);
-  const p5 = toIso(x, y + d, z);
-  const p6 = toIso(x + w, y + d, z);
-  const p7 = toIso(x + w, y, z);
-  // Top
-  c.beginPath(); c.moveTo(p1.sx,p1.sy); c.lineTo(p2.sx,p2.sy);
-  c.lineTo(p3.sx,p3.sy); c.lineTo(p4.sx,p4.sy); c.closePath();
-  c.fillStyle = topC; c.fill();
-  // Front (y+d face)
-  c.beginPath(); c.moveTo(p4.sx,p4.sy); c.lineTo(p3.sx,p3.sy);
-  c.lineTo(p6.sx,p6.sy); c.lineTo(p5.sx,p5.sy); c.closePath();
-  c.fillStyle = frontC; c.fill();
-  // Right (x+w face)
-  c.beginPath(); c.moveTo(p3.sx,p3.sy); c.lineTo(p2.sx,p2.sy);
-  c.lineTo(p7.sx,p7.sy); c.lineTo(p6.sx,p6.sy); c.closePath();
-  c.fillStyle = rightC; c.fill();
+  const tw = w * TILE_W, td = d * TILE_H, th = h * Z_SCALE;
+  // Front face (y+d側、上面の下に見える面)
+  if (th > 0.5) {
+    const ft = toIso(x, y + d, z + h);
+    c.fillStyle = frontC;
+    c.fillRect(ft.sx, ft.sy, tw, th);
+  }
+  // Top face (上から見た面)
+  const tl = toIso(x, y, z + h);
+  c.fillStyle = topC;
+  c.fillRect(tl.sx, tl.sy, tw, td);
+  // 右辺線（奥行き感の補助）
+  if (th > 0.5) {
+    const rt = toIso(x + w, y, z + h);
+    c.fillStyle = rightC;
+    c.fillRect(rt.sx, rt.sy, Math.max(1, tw * 0.03), td + th);
+  }
 }
 
 function drawShadow(x, y, rx, ry) {
@@ -506,111 +494,65 @@ function drawShadow(x, y, rx, ry) {
 // SECTION: OFFICE DRAWING
 // ============================================================
 function drawFloor() {
-  // 外部地面: キャンバス全体を埋めるために大幅に拡張
-  const EXT = 12;
-  for (let gy = -EXT; gy < GRID_H + EXT; gy++) {
-    for (let gx = -EXT; gx < GRID_W + EXT; gx++) {
+  // 矩形グリッド: キャンバスを隙間なく埋める
+  for (let gy = 0; gy < GRID_H; gy++) {
+    for (let gx = 0; gx < GRID_W; gx++) {
       const p = toIso(gx + 0.5, gy + 0.5, 0);
-      // 画面外ならスキップ（パフォーマンス最適化）
-      if (p.sx < -TILE_W * 2 || p.sx > canvas.width + TILE_W * 2 ||
-          p.sy < -TILE_H * 2 || p.sy > canvas.height + TILE_H * 2) continue;
-
-      const isInside = gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H;
-      if (isInside) {
-        const col = (gx + gy) % 2 === 0 ? PALETTE.floor : PALETTE.floorAlt;
-        drawDiamond(p.sx, p.sy, col);
-      } else {
-        // 外部地面 — 暗めのタイルで隙間を埋める
-        const col = (gx + gy) % 2 === 0 ? '#2e2838' : '#2a2434';
-        drawDiamond(p.sx, p.sy, col);
-      }
+      const col = (gx + gy) % 2 === 0 ? PALETTE.floor : PALETTE.floorAlt;
+      drawDiamond(p.sx, p.sy, col);
     }
   }
 }
 
 function drawWalls() {
   const WALL_H = 3.2;
-  // Back wall (y=0, from x=0 to x=12)
-  for (let gx = 0; gx < GRID_W; gx++) {
-    const bl = toIso(gx, 0, 0);
-    const br = toIso(gx + 1, 0, 0);
-    const tr = toIso(gx + 1, 0, WALL_H);
-    const tl = toIso(gx, 0, WALL_H);
-    c.beginPath();
-    c.moveTo(tl.sx, tl.sy); c.lineTo(tr.sx, tr.sy);
-    c.lineTo(br.sx, br.sy); c.lineTo(bl.sx, bl.sy);
-    c.closePath();
-    c.fillStyle = PALETTE.wallBack;
-    c.fill();
-    // Baseboard
-    const bbH = 0.2;
-    const bbl = toIso(gx, 0, 0);
-    const bbr = toIso(gx + 1, 0, 0);
-    const btr = toIso(gx + 1, 0, bbH);
-    const btl = toIso(gx, 0, bbH);
-    c.beginPath();
-    c.moveTo(btl.sx, btl.sy); c.lineTo(btr.sx, btr.sy);
-    c.lineTo(bbr.sx, bbr.sy); c.lineTo(bbl.sx, bbl.sy);
-    c.closePath();
-    c.fillStyle = PALETTE.wallAccent;
-    c.fill();
-  }
-  // Windows (columns 4-7)
+  const wallTL = toIso(0, 0, WALL_H);
+  const wallBR = toIso(GRID_W, 0, 0);
+  const wallW = wallBR.sx - wallTL.sx;
+  const wallHpx = wallBR.sy - wallTL.sy;
+
+  // 背面壁 — 床の上のバンド（全幅）
+  c.fillStyle = PALETTE.wallBack;
+  c.fillRect(wallTL.sx, wallTL.sy, wallW, wallHpx);
+
+  // 巾木（背面）
+  const bbH = 0.2;
+  const bbTop = toIso(0, 0, bbH);
+  c.fillStyle = PALETTE.wallAccent;
+  c.fillRect(bbTop.sx, bbTop.sy, wallW, wallBR.sy - bbTop.sy);
+
+  // 窓 (列 4-7)
   for (let gx = 4; gx < 8; gx++) {
-    const wy1 = 1.0, wy2 = 2.6;
-    const bl = toIso(gx + 0.1, 0, wy1);
-    const br = toIso(gx + 0.9, 0, wy1);
-    const tr = toIso(gx + 0.9, 0, wy2);
-    const tl = toIso(gx + 0.1, 0, wy2);
-    // Sky
-    c.beginPath();
-    c.moveTo(tl.sx, tl.sy); c.lineTo(tr.sx, tr.sy);
-    c.lineTo(br.sx, br.sy); c.lineTo(bl.sx, bl.sy);
-    c.closePath();
-    const skyGrad = c.createLinearGradient(tl.sx, tl.sy, bl.sx, bl.sy);
+    const wTL = toIso(gx + 0.1, 0, 2.6);
+    const wBR = toIso(gx + 0.9, 0, 1.0);
+    const wx = wTL.sx, wy = wTL.sy;
+    const ww = wBR.sx - wTL.sx, wh = wBR.sy - wTL.sy;
+    // 空
+    const skyGrad = c.createLinearGradient(wx, wy, wx, wy + wh);
     skyGrad.addColorStop(0, '#87ceeb');
     skyGrad.addColorStop(1, '#b8e6ff');
     c.fillStyle = skyGrad;
-    c.fill();
-    // Glass reflection
+    c.fillRect(wx, wy, ww, wh);
+    // ガラス反射
     c.fillStyle = 'rgba(255,255,255,0.15)';
-    c.fill();
-    // Frame
+    c.fillRect(wx, wy, ww, wh);
+    // フレーム
     c.strokeStyle = PALETTE.wallAccent;
     c.lineWidth = 1.5;
-    c.stroke();
-    // Cross bar
-    const mid = toIso(gx + 0.5, 0, (wy1 + wy2) / 2);
-    const midL = toIso(gx + 0.1, 0, (wy1 + wy2) / 2);
-    const midR = toIso(gx + 0.9, 0, (wy1 + wy2) / 2);
-    c.beginPath(); c.moveTo(midL.sx, midL.sy); c.lineTo(midR.sx, midR.sy);
+    c.strokeRect(wx, wy, ww, wh);
+    // 桟
+    const midY = wy + wh / 2;
+    c.beginPath(); c.moveTo(wx, midY); c.lineTo(wx + ww, midY);
     c.strokeStyle = '#c8b8a0'; c.lineWidth = 1; c.stroke();
   }
-  // Left wall (x=0, from y=0 to y=10)
-  for (let gy = 0; gy < GRID_H; gy++) {
-    const bl = toIso(0, gy, 0);
-    const br = toIso(0, gy + 1, 0);
-    const tr = toIso(0, gy + 1, WALL_H);
-    const tl = toIso(0, gy, WALL_H);
-    c.beginPath();
-    c.moveTo(tl.sx, tl.sy); c.lineTo(tr.sx, tr.sy);
-    c.lineTo(br.sx, br.sy); c.lineTo(bl.sx, bl.sy);
-    c.closePath();
-    c.fillStyle = PALETTE.wallSide;
-    c.fill();
-    // Baseboard
-    const bbH = 0.2;
-    const bbl = toIso(0, gy, 0);
-    const bbr = toIso(0, gy + 1, 0);
-    const btr = toIso(0, gy + 1, bbH);
-    const btl = toIso(0, gy, bbH);
-    c.beginPath();
-    c.moveTo(btl.sx, btl.sy); c.lineTo(btr.sx, btr.sy);
-    c.lineTo(bbr.sx, bbr.sy); c.lineTo(bbl.sx, bbl.sy);
-    c.closePath();
-    c.fillStyle = PALETTE.wallAccent;
-    c.fill();
-  }
+
+  // 左壁 — 細ストリップ
+  const leftW = Math.max(4, TILE_W * 0.06);
+  c.fillStyle = PALETTE.wallSide;
+  c.fillRect(wallTL.sx - leftW, wallTL.sy, leftW, GRID_H * TILE_H + wallHpx);
+  // 巾木（左壁）
+  c.fillStyle = PALETTE.wallAccent;
+  c.fillRect(wallTL.sx - leftW, wallTL.sy, leftW * 0.4, GRID_H * TILE_H + wallHpx);
 }
 
 function drawDesk(gx, gy, isBoss) {
@@ -1206,8 +1148,8 @@ function draw() {
   try {
     c.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Background — 外部タイルと調和する色
-    c.fillStyle = '#2c2636';
+    // Background — 壁色で全面塗り（隙間なし）
+    c.fillStyle = PALETTE.wallBack;
     c.fillRect(0, 0, canvas.width, canvas.height);
 
     // Floor
