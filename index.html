@@ -1198,11 +1198,18 @@ function drawFloatingEmojis() {
 }
 
 function showPhaseOverlay(phase) {
+  // 開始（Phase 1）と完了（Phase 6）のみオーバーレイ表示
+  if (phase !== 1 && phase !== 6) return;
   const overlay = document.getElementById('phaseOverlay');
-  overlay.querySelector('.phase-num').textContent = 'Phase ' + phase;
-  overlay.querySelector('.phase-name').textContent = PHASE_NAMES[phase] || '';
+  if (phase === 6) {
+    overlay.querySelector('.phase-num').textContent = '🎊 完了';
+    overlay.querySelector('.phase-name').textContent = '開発が完了しました';
+  } else {
+    overlay.querySelector('.phase-num').textContent = '開発開始';
+    overlay.querySelector('.phase-name').textContent = 'プロジェクトを開始します';
+  }
   overlay.classList.add('visible');
-  setTimeout(() => overlay.classList.remove('visible'), 1800);
+  setTimeout(() => overlay.classList.remove('visible'), 2500);
 }
 
 function spawnCelebration() {
