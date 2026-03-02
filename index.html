@@ -1734,6 +1734,8 @@ let simQueue = [];
 let simTimer = null;
 
 function simulateResponse(text) {
+  // ログをクリアして新規開始
+  document.getElementById('logPanel').innerHTML = '';
   addLog('boss', '📢 ' + text);
 
   // 開発開始オーバーレイ
@@ -2045,12 +2047,9 @@ function init() {
     }
   };
 
-  // Start with initial log
+  // 初期状態: 指示待ち（チャット入力まで何も動かない）
   addLog('boss', '🧪 Code-Lab 司令室を起動しました');
-  addLog('boss', '💡 「▶ デモ」で自動デモ、「🎯 手動」で手動モードに切り替えられます');
-
-  // Auto start demo
-  setTimeout(() => startDemo(), 1500);
+  addLog('boss', '💡 チャットに開発指示を入力してください');
 
   // Start render loop
   requestAnimationFrame(mainLoop);
