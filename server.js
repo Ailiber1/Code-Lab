@@ -95,6 +95,9 @@ wss.on('connection', (ws, req) => {
       case 'abort':
         handleAbort(ws);
         break;
+      case 'exec_bash':
+        handleExecBash(ws, msg);
+        break;
       default:
         ws.send(JSON.stringify({ type: 'error', message: 'Unknown message type: ' + msg.type }));
     }
@@ -132,7 +135,9 @@ function handleConnect(ws, msg) {
     sessionId: null,
     projectDir: resolvedDir,
     toolHistory: [],
-    currentPhase: 1
+    currentPhase: 1,
+    permissionMode: 'smart',  // smart | full
+    blockedBash: []
   });
 
   ws.send(JSON.stringify({
@@ -153,9 +158,16 @@ function handleCommand(ws, msg) {
     return;
   }
 
-  // 既存プロセスがあれば終了
+  // 既存プロセスチェック（ゾンビプロセス防止付き）
   if (session.proc) {
-    ws.send(JSON.stringify({ type: 'error', message: 'A command is already running. Send "abort" first.' }));
+    try {
+      process.kill(session.proc.pid, 0); // signal 0 = 存在確認のみ
+    } catch {
+      session.proc = null; // プロセスは既に終了 → クリーンアップ
+    }
+  }
+  if (session.proc) {
+    ws.send(JSON.stringify({ type: 'error', message: 'コマンド実行中です。完了をお待ちください。' }));
     return;
   }
 
@@ -195,27 +207,30 @@ function handleCommand(ws, msg) {
   }
 
   // Claude CLI 起動引数
-  const args = ['-p', prompt, '--output-format', 'stream-json'];
+  const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
 
-  // acceptEdits モード
-  args.push('--permission-mode', 'acceptEdits');
+  // パーミッションモード
+  // スマートモード/全権限 → bypassPermissions（サーバー側でフィルタリング）
+  // サーバー側のセキュリティレイヤーが破壊的コマンドをブロックする
+  args.push('--permission-mode', 'bypassPermissions');
 
   // セッションID再利用でコンテキスト維持
   if (session.sessionId) {
     args.push('--session-id', session.sessionId);
   }
 
-  // 環境変数からCLAUDECODE削除（ネスト検出回避）
+  // 環境変数からCLAUDE*を全削除（ネスト検出回避）
   const env = { ...process.env };
-  delete env.CLAUDECODE;
-  delete env.CLAUDE_CODE;
+  for (const key of Object.keys(env)) {
+    if (key.startsWith('CLAUDE') || key === 'CLAUDECODE') delete env[key];
+  }
 
   console.log('[CLI] 実行:', 'claude', args.join(' '));
 
   const proc = spawn('claude', args, {
     cwd: session.projectDir,
     env,
-    stdio: ['pipe', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe'], // stdin='ignore': -pモードではstdin不要、pipeだとハングする
     shell: false // シェルインジェクション回避
   });
 
@@ -317,6 +332,202 @@ function handleAbort(ws) {
     }
   }, 3000);
 }
+
+// ============================================================
+// SECTION: Bash Security Layer (スマートモード)
+// ============================================================
+
+// 【絶対ブロック】破壊的コマンド — 確認すら出さない、完全拒否
+const BLOCKED_PATTERNS = [
+  /\brm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+|--force\s+)?\//,  // rm -rf / , rm -f /path
+  /\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f|--recursive\s+--force)/,  // rm -rf 全般
+  /\brm\s+-[a-zA-Z]*r[a-zA-Z]*\s+[~\/]/,  // rm -r ~/  rm -r /
+  /\bmkfs\b/,                          // ディスクフォーマット
+  /\bdd\s+if=/,                        // ディスクダンプ
+  /:()\s*\{\s*:\|:\s*&\s*\}/,          // fork bomb
+  /\bfork\s*bomb\b/i,
+  />\s*\/dev\/sd[a-z]/,                // デバイス直書き
+  /\bchmod\s+(-[a-zA-Z]*\s+)?777\s+\//,  // chmod 777 /
+  /\bchown\s+.*\s+\//,                // chown /
+  /\bgit\s+push\s+.*--force\s+.*main/, // force push to main
+  /\bgit\s+push\s+.*--force\s+.*master/,
+  /\bgit\s+reset\s+--hard\b/,         // git reset --hard
+  /\bcurl\s+.*\|\s*sh\b/,             // curl | sh (リモートスクリプト実行)
+  /\bcurl\s+.*\|\s*bash\b/,
+  /\bwget\s+.*\|\s*sh\b/,
+  /\bsudo\s+rm\b/,                    // sudo rm
+  /\bsudo\s+mkfs\b/,
+  /\bsudo\s+dd\b/,
+  /\b(shutdown|reboot|halt|poweroff)\b/,
+  /\bdrop\s+database\b/i,             // SQL drop
+  /\bdrop\s+table\b/i,
+  /\btruncate\s+table\b/i,
+  />\s*\/etc\//,                       // /etc/ への書き込み
+  /\bkillall\b/,                       // 全プロセス停止
+  /\bpkill\s+-9\b/,
+];
+
+// 【自動承認】安全なコマンド — MEMORY.mdの確認不要ルールに準拠
+const SAFE_PATTERNS = [
+  /^\s*git\s+(status|log|diff|show|branch|tag|stash|fetch|pull|add|commit|push|checkout|merge|rebase|remote|clone)\b/,
+  /^\s*git\s+-C\s+/,                  // git -C /path
+  /^\s*npm\s+(install|ci|audit|test|run|start|build|init|ls|outdated|version)\b/,
+  /^\s*npx\s+/,
+  /^\s*node\s+/,                       // node実行
+  /^\s*firebase\s+(deploy|init|serve|login|logout|use|projects:list)\b/,
+  /^\s*gh\s+/,                         // GitHub CLI
+  /^\s*cat\s+/,
+  /^\s*ls\b/,
+  /^\s*pwd\b/,
+  /^\s*echo\s+/,
+  /^\s*head\s+/,
+  /^\s*tail\s+/,
+  /^\s*wc\s+/,
+  /^\s*find\s+/,
+  /^\s*grep\s+/,
+  /^\s*which\s+/,
+  /^\s*mkdir\s+-?p?\s+/,              // mkdir
+  /^\s*touch\s+/,
+  /^\s*cp\s+/,                         // コピー
+  /^\s*mv\s+/,                         // 移動
+  /^\s*tsc\b/,                         // TypeScript
+  /^\s*eslint\b/,
+  /^\s*prettier\b/,
+  /^\s*jest\b/,
+  /^\s*vitest\b/,
+  /^\s*python3?\s+/,
+  /^\s*pip3?\s+install\b/,
+  /^\s*curl\s+(?!.*\|\s*(sh|bash))/,   // curl（パイプsh以外）
+  /^\s*open\s+/,
+  /^\s*cd\s+/,
+];
+
+// コマンド分類: 'blocked' | 'safe' | 'confirm'
+function classifyCommand(command) {
+  if (!command || typeof command !== 'string') return 'blocked';
+  const trimmed = command.trim();
+
+  // 1. 破壊的コマンドチェック（絶対ブロック）
+  for (const pat of BLOCKED_PATTERNS) {
+    if (pat.test(trimmed)) return 'blocked';
+  }
+
+  // 2. パイプチェイン: 各コマンドを個別チェック
+  const parts = trimmed.split(/\s*[|&;]\s*/);
+  for (const part of parts) {
+    for (const pat of BLOCKED_PATTERNS) {
+      if (pat.test(part.trim())) return 'blocked';
+    }
+  }
+
+  // 3. 安全コマンドチェック
+  for (const pat of SAFE_PATTERNS) {
+    if (pat.test(trimmed)) return 'safe';
+  }
+
+  // 4. それ以外 → 確認が必要
+  return 'confirm';
+}
+
+// ============================================================
+// SECTION: Bash Direct Execution
+// ============================================================
+function execBashCommand(ws, session, command, source) {
+  console.log('[BASH] ' + source + '実行:', command);
+
+  ws.send(JSON.stringify({
+    type: 'dev_event',
+    event: {
+      agent: 'developer',
+      action: '⚡ コマンド実行: ' + command.slice(0, 40),
+      thought: source + 'コマンドを実行中...',
+      emoji: '⚡'
+    }
+  }));
+
+  const proc = spawn('sh', ['-c', command], {
+    cwd: session.projectDir,
+    env: { ...process.env },
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: 120000 // 2分タイムアウト
+  });
+
+  let stdout = '';
+  let stderr = '';
+
+  proc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+  proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+
+  proc.on('close', (code) => {
+    const output = (stdout + (stderr ? '\n[stderr] ' + stderr : '')).slice(0, 2000);
+    ws.send(JSON.stringify({
+      type: 'bash_result',
+      command,
+      output: output || '(出力なし)',
+      exitCode: code
+    }));
+
+    ws.send(JSON.stringify({
+      type: 'dev_event',
+      event: {
+        agent: code === 0 ? 'developer' : 'debugger',
+        action: code === 0 ? '✅ 完了: ' + command.slice(0, 30) : '❌ 失敗: ' + command.slice(0, 30),
+        thought: code === 0 ? '正常に実行されました' : stderr.slice(0, 40),
+        emoji: code === 0 ? '⚡' : '🐛'
+      }
+    }));
+    console.log('[BASH] 完了: code=' + code);
+  });
+
+  proc.on('error', (err) => {
+    ws.send(JSON.stringify({
+      type: 'bash_result',
+      command,
+      output: 'コマンド実行エラー: ' + err.message,
+      exitCode: 1
+    }));
+    console.error('[BASH] エラー:', err.message);
+  });
+}
+
+// ブラウザから承認されたBashコマンドを実行
+function handleExecBash(ws, msg) {
+  const session = sessions.get(ws);
+  if (!session) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Not connected.' }));
+    return;
+  }
+
+  const command = msg.command;
+  if (!command || typeof command !== 'string') {
+    ws.send(JSON.stringify({ type: 'error', message: 'command is required' }));
+    return;
+  }
+
+  // 破壊的コマンドは承認ボタン経由でも絶対ブロック
+  if (classifyCommand(command) === 'blocked') {
+    ws.send(JSON.stringify({
+      type: 'bash_result',
+      command,
+      output: '⛔ 破壊的コマンドは実行できません',
+      exitCode: 1
+    }));
+    ws.send(JSON.stringify({
+      type: 'dev_event',
+      event: {
+        agent: 'security',
+        action: '⛔ ブロック: ' + command.slice(0, 40),
+        thought: '破壊的コマンドを完全拒否しました',
+        emoji: '🛡️'
+      }
+    }));
+    console.log('[BASH] 破壊的コマンドをブロック:', command);
+    return;
+  }
+
+  execBashCommand(ws, session, command, '手動');
+}
+
 
 // ============================================================
 // SECTION: stream-json Parser → DevEvent Converter
@@ -426,9 +637,25 @@ function processStreamJson(ws, session, parsed) {
     const text = typeof content === 'string' ? content :
                  Array.isArray(content) ? content.map(b => b.text || '').join(' ') : '';
 
+    // Bash権限拒否検出
+    const isDenied = parsed.is_error && /permission|denied|not allowed|blocked/i.test(text.slice(0, 300));
+    if (isDenied) {
+      // 直前のBashコマンドを取得
+      const lastBash = session.toolHistory.filter(t => t.tool.toLowerCase() === 'bash').pop();
+      const cmd = lastBash ? lastBash.command : '';
+      if (cmd) {
+        session.blockedBash.push({ command: cmd, time: Date.now() });
+        ws.send(JSON.stringify({
+          type: 'bash_blocked',
+          command: cmd,
+          reason: truncate(text, 100)
+        }));
+      }
+    }
+
     // エラー検出
     const hasError = parsed.is_error || /error|fail|exception/i.test(text.slice(0, 200));
-    if (hasError) {
+    if (hasError && !isDenied) {
       ws.send(JSON.stringify({
         type: 'dev_event',
         event: {
@@ -464,6 +691,7 @@ function handleToolUse(ws, session, block) {
   // ツール履歴に追加
   const historyEntry = {
     tool: toolName,
+    command: toolName.toLowerCase() === 'bash' ? (input.command || '') : '',
     isTest: /\b(test|jest|vitest|mocha|pytest)\b/i.test(inputStr),
     hasError: false,
     isDeploy: /\b(deploy|push|publish)\b/i.test(inputStr),
@@ -504,6 +732,65 @@ function handleToolUse(ws, session, block) {
   };
   if (stat) { event.stat = stat; event.statDelta = statDelta; }
   if (phaseUpdate) event.phase = phaseUpdate;
+
+  // Bashコマンド セキュリティフィルタリング
+  if (toolName.toLowerCase() === 'bash' && input.command) {
+    const cmd = input.command;
+    const classification = classifyCommand(cmd);
+
+    if (classification === 'blocked') {
+      // 破壊的コマンド → 完全ブロック（実行させない）
+      ws.send(JSON.stringify({
+        type: 'bash_blocked_permanent',
+        command: cmd,
+        reason: '破壊的コマンドのため完全ブロック'
+      }));
+      ws.send(JSON.stringify({
+        type: 'dev_event',
+        event: {
+          agent: 'security',
+          action: '⛔ 破壊的コマンドをブロック: ' + cmd.slice(0, 30),
+          thought: 'セキュリティポリシーにより実行を拒否',
+          emoji: '🛡️'
+        }
+      }));
+      console.log('[SECURITY] 破壊的コマンドをブロック:', cmd);
+    } else if (classification === 'safe') {
+      // 安全コマンド → 自動実行の通知
+      ws.send(JSON.stringify({
+        type: 'tool_activity',
+        tool: 'bash',
+        command: cmd,
+        classification: 'safe',
+        status: 'auto'
+      }));
+    } else if (session.permissionMode === 'smart') {
+      // 不明コマンド（スマートモード）→ 確認カード表示
+      ws.send(JSON.stringify({
+        type: 'bash_needs_confirm',
+        command: cmd,
+        reason: '未知のコマンドのため確認が必要です'
+      }));
+      ws.send(JSON.stringify({
+        type: 'dev_event',
+        event: {
+          agent: 'security',
+          action: '⚠️ 確認待ち: ' + cmd.slice(0, 30),
+          thought: '未登録コマンド — ユーザーの承認を待機',
+          emoji: '🛡️'
+        }
+      }));
+    } else {
+      // 全権限モード → 通知のみ
+      ws.send(JSON.stringify({
+        type: 'tool_activity',
+        tool: 'bash',
+        command: cmd,
+        classification: 'auto',
+        status: 'auto'
+      }));
+    }
+  }
 
   ws.send(JSON.stringify({ type: 'dev_event', event }));
 }

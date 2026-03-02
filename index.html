@@ -40,11 +40,12 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 #commandBar{display:flex;align-items:center;gap:8px;padding:8px 12px;
   background:var(--panel);border-top:1px solid var(--border)}
 #commandBar .label{font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap}
-#commandBar input{flex:1;background:#ffffff08;border:1px solid var(--border);
+#commandBar textarea{flex:1;background:#ffffff08;border:1px solid var(--border);
   border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;
-  font-family:'Noto Sans JP',sans-serif;outline:none}
-#commandBar input:focus{border-color:var(--accent)}
-#commandBar input::placeholder{color:#ffffff40}
+  font-family:'Noto Sans JP',sans-serif;outline:none;resize:none;
+  min-height:20px;max-height:120px;line-height:1.4;overflow-y:auto}
+#commandBar textarea:focus{border-color:var(--accent)}
+#commandBar textarea::placeholder{color:#ffffff40}
 #commandBar button{background:var(--accent);color:#1a1520;border:none;
   border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:14px}
 #commandBar button:hover{filter:brightness(1.15)}
@@ -202,7 +203,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
         <button id="btnAttach" title="ファイル添付">＋</button>
         <div id="attachPreview"><div class="file-list" id="fileList"></div></div>
         <input type="file" id="fileInput" multiple accept=".md,.txt,.js,.ts,.html,.css,.json,.py,.java,.c,.cpp,.h,.xml,.yaml,.yml,.csv,.sh,.png,.jpg,.jpeg,.gif,.webp,.svg" style="display:none">
-        <input type="text" id="cmdInput" placeholder="開発指示を入力してください...">
+        <textarea id="cmdInput" placeholder="開発指示を入力してください..." rows="1"></textarea>
         <button id="cmdSend">&#x25B6;</button>
       </div>
     </div>
@@ -325,8 +326,32 @@ let ws = null;
 let liveConnected = false;
 let pendingFiles = []; // 添付ファイル一時保管
 
+let liveCommandRunning = false;
+
+function setLiveRunning(running) {
+  liveCommandRunning = running;
+  const cmdInput = document.getElementById('cmdInput');
+  const cmdSend = document.getElementById('cmdSend');
+  if (running) {
+    cmdInput.disabled = true;
+    cmdInput.placeholder = '実行中...完了までお待ちください';
+    cmdSend.disabled = true;
+    cmdSend.style.opacity = '0.4';
+  } else {
+    cmdInput.disabled = false;
+    cmdInput.placeholder = '開発指示を入力してください...';
+    cmdSend.disabled = false;
+    cmdSend.style.opacity = '1';
+    cmdInput.focus();
+  }
+}
+
 function sendCommand(text) {
   if (CONNECTION_MODE === 'websocket' && ws && ws.readyState === WebSocket.OPEN) {
+    if (liveCommandRunning) {
+      addLog('boss', '\u26A0\uFE0F 前のコマンドが実行中です');
+      return;
+    }
     const filesLabel = pendingFiles.length ? ' [+' + pendingFiles.length + 'ファイル]' : '';
     addLog('boss', '\u{1F4E2} ' + text + filesLabel);
     const payload = { type: 'command', text };
@@ -334,6 +359,7 @@ function sendCommand(text) {
       payload.files = pendingFiles.map(f => ({ name: f.name, type: f.type, data: f.data }));
     }
     ws.send(JSON.stringify(payload));
+    setLiveRunning(true);
     clearPendingFiles();
   } else {
     simulateResponse(text);
@@ -975,10 +1001,10 @@ function drawCharacter(agentDef, gx, gy, isActive, isBoss) {
 
   c.globalAlpha = 1;
 
-  drawRoleTag(sx, sy - 42*sc, agentDef, isActive, isBoss);
+  drawRoleTag(sx, sy - 58*sc, agentDef, isActive, isBoss);
 
   if (isActive && ag && ag.thought) {
-    drawThoughtBubble(sx, sy - 56*sc, ag.thought, agentDef.color);
+    drawThoughtBubble(sx, sy - 74*sc, ag.thought, agentDef.color);
   }
 
   // Confirm icon
@@ -986,7 +1012,7 @@ function drawCharacter(agentDef, gx, gy, isActive, isBoss) {
     const blinkAlpha = Math.sin(t * 4) > 0 ? 1 : 0.3;
     c.globalAlpha = blinkAlpha;
     c.font = Math.round(14*S) + 'px sans-serif';
-    c.fillText('\u{1F4E9}', sx + 14*S, sy - 46*sc);
+    c.fillText('\u{1F4E9}', sx + 14*S, sy - 62*sc);
     c.globalAlpha = 1;
   }
 
@@ -1893,6 +1919,7 @@ function disconnectWebSocket() {
     ws = null;
   }
   liveConnected = false;
+  setLiveRunning(false);
   updateLiveStatus('disconnected', '未接続');
   // 全エージェントをアイドルに
   AGENT_DEFS.forEach(a => {
@@ -1921,6 +1948,10 @@ function handleServerMessage(msg) {
       break;
 
     case 'command_done':
+      setLiveRunning(false);
+      if (msg.exitCode === 0) {
+        showStatusOverlay('\u{1F38A} 完了', '開発が完了しました', 3000);
+      }
       // コマンド完了: エージェントのworkingを解除
       setTimeout(() => {
         AGENT_DEFS.forEach(a => {
@@ -1933,6 +1964,7 @@ function handleServerMessage(msg) {
       break;
 
     case 'error':
+      setLiveRunning(false);
       addLog('boss', '\u274C エラー: ' + (msg.message || '不明なエラー'));
       updateLiveStatus('error', msg.message || 'エラー');
       break;
@@ -1971,12 +2003,18 @@ function init() {
     sendCommand(text);
   });
   cmdInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
       const text = cmdInput.value.trim();
       if (!text) return;
       cmdInput.value = '';
+      cmdInput.style.height = 'auto';
       sendCommand(text);
     }
+  });
+  cmdInput.addEventListener('input', () => {
+    cmdInput.style.height = 'auto';
+    cmdInput.style.height = Math.min(cmdInput.scrollHeight, 120) + 'px';
   });
 
   // ファイル添付ボタン
@@ -2021,9 +2059,8 @@ function init() {
       updateUI();
       return;
     }
-    // パスを聞いて即接続
-    const dir = prompt('プロジェクトのフォルダパスを入力してください\n（cdは不要。パスのみ入力）\n例: /Users/shigemotoyasunari/Code-Lab');
-    if (!dir || !dir.trim()) return;
+    // 自動接続（サーバーのディレクトリに直接接続）
+    const dir = '/Users/shigemotoyasunari/Code-Lab';
     document.getElementById('btnLive').classList.add('active');
     document.getElementById('btnDemo').classList.remove('active');
     stopDemo();
