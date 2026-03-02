@@ -1054,51 +1054,73 @@ function drawRoleTag(sx, sy, agentDef, isActive, isBoss) {
 
 function drawThoughtBubble(sx, sy, text, borderColor) {
   const S = ps(1);
-  const fontSize = Math.max(9, Math.round(10 * S));
+  const fontSize = Math.max(8, Math.round(9 * S));
   c.font = '500 ' + fontSize + 'px "Noto Sans JP", sans-serif';
-  const maxW = 140 * S;
-  let displayText = text;
-  if (c.measureText(text).width > maxW) {
-    while (c.measureText(displayText + '…').width > maxW && displayText.length > 0) {
-      displayText = displayText.slice(0, -1);
+  const maxLineW = 120 * S;
+  const maxLines = 3;
+  const lineH = fontSize * 1.35;
+
+  // テキストを複数行に折り返し
+  const lines = [];
+  let remain = text;
+  while (remain.length > 0 && lines.length < maxLines) {
+    if (c.measureText(remain).width <= maxLineW) {
+      lines.push(remain);
+      remain = '';
+    } else {
+      let cut = remain.length;
+      while (cut > 1 && c.measureText(remain.slice(0, cut)).width > maxLineW) cut--;
+      if (lines.length === maxLines - 1 && remain.length > cut) {
+        // 最終行: 末尾を…に
+        let t = remain.slice(0, cut);
+        while (t.length > 1 && c.measureText(t + '…').width > maxLineW) t = t.slice(0, -1);
+        lines.push(t + '…');
+        remain = '';
+      } else {
+        lines.push(remain.slice(0, cut));
+        remain = remain.slice(cut);
+      }
     }
-    displayText += '…';
   }
-  const tw = c.measureText(displayText).width;
-  const px = 8*S, py = 5*S;
-  const bw = tw + px*2;
-  const bh = 18*S + py;
+
+  const maxTw = Math.max(...lines.map(l => c.measureText(l).width));
+  const px = 7*S, py = 4*S;
+  const bw = maxTw + px*2;
+  const bh = lines.length * lineH + py*2;
   const bx = sx - bw/2;
   const by = sy - bh - 8*S;
 
   c.fillStyle = 'rgba(255,255,255,0.95)';
-  rrect(bx, by, bw, bh, 6*S);
+  rrect(bx, by, bw, bh, 5*S);
   c.fill();
   c.strokeStyle = borderColor;
   c.lineWidth = 1.5*S;
-  rrect(bx, by, bw, bh, 6*S);
+  rrect(bx, by, bw, bh, 5*S);
   c.stroke();
 
   // Tail
   c.fillStyle = 'rgba(255,255,255,0.95)';
   c.beginPath();
-  c.moveTo(sx - 4*S, by + bh);
-  c.lineTo(sx, by + bh + 6*S);
-  c.lineTo(sx + 4*S, by + bh);
+  c.moveTo(sx - 3*S, by + bh);
+  c.lineTo(sx, by + bh + 5*S);
+  c.lineTo(sx + 3*S, by + bh);
   c.closePath();
   c.fill();
   c.beginPath();
-  c.moveTo(sx - 4*S, by + bh - 0.5);
-  c.lineTo(sx, by + bh + 6*S);
-  c.lineTo(sx + 4*S, by + bh - 0.5);
+  c.moveTo(sx - 3*S, by + bh - 0.5);
+  c.lineTo(sx, by + bh + 5*S);
+  c.lineTo(sx + 3*S, by + bh - 0.5);
   c.strokeStyle = borderColor;
   c.lineWidth = 1.5*S;
   c.stroke();
 
+  // テキスト描画（複数行）
   c.fillStyle = '#333';
   c.textAlign = 'center';
   c.textBaseline = 'middle';
-  c.fillText(displayText, sx, by + bh/2);
+  lines.forEach((line, i) => {
+    c.fillText(line, sx, by + py + lineH * (i + 0.5));
+  });
   c.textAlign = 'start';
   c.textBaseline = 'alphabetic';
 }
