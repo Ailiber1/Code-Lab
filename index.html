@@ -237,7 +237,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
         <button id="btnAttach" title="ファイル添付">＋</button>
         <div id="attachPreview"><div class="file-list" id="fileList"></div></div>
         <input type="file" id="fileInput" multiple accept=".md,.txt,.js,.ts,.html,.css,.json,.py,.java,.c,.cpp,.h,.xml,.yaml,.yml,.csv,.sh,.png,.jpg,.jpeg,.gif,.webp,.svg" style="display:none">
-        <textarea id="cmdInput" placeholder="開発指示を入力してください..." rows="1"></textarea>
+        <textarea id="cmdInput" placeholder="例: ポートフォリオサイトを作って" rows="1"></textarea>
         <button id="cmdSend">&#x25B6;</button>
       </div>
     </div>
@@ -264,13 +264,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
         <div class="section-title">作業ログ</div>
         <div id="logPanel"></div>
       </div>
-      <!-- Controls -->
-      <div id="controls">
+      <!-- Controls (デモ専用) -->
+      <div id="controls" style="display:none">
         <button id="btnDemo" class="active">&#x25B6; デモ</button>
-        <button id="btnLive">&#x1F4E1; Live</button>
+        <button id="btnLive" style="display:none">&#x1F4E1; Live</button>
       </div>
-      <!-- Live状態表示（シンプル） -->
-      <div id="livePanel">
+      <!-- Live状態表示（非表示） -->
+      <div id="livePanel" style="display:none!important">
         <div class="live-title"><span class="dot" id="liveDot"></span><span id="liveStatus">未接続</span></div>
       </div>
     </div>
@@ -391,7 +391,7 @@ function setLiveRunning(running) {
     cmdSend.style.opacity = '0.4';
   } else {
     cmdInput.disabled = false;
-    cmdInput.placeholder = '開発指示を入力してください...';
+    cmdInput.placeholder = '例: ポートフォリオサイトを作って';
     cmdSend.disabled = false;
     cmdSend.style.opacity = '1';
     cmdInput.focus();
@@ -1784,63 +1784,227 @@ function stopDemo() {
 // SECTION: COMMAND PROCESSING (Interactive Demo)
 // ============================================================
 
-// 指示内容からエージェント連鎖シナリオを生成（全員参加型）
+// 指示内容からエージェント連鎖シナリオを生成（全員参加型・入力に応じた会話）
 function buildScenario(text) {
-  const lower = text.toLowerCase();
   const steps = [];
-  const summary = text.slice(0, 20) + (text.length > 20 ? '…' : '');
+  const summary = text.slice(0, 20) + (text.length > 20 ? '\u2026' : '');
 
-  // Phase 1: リードが受け取って設計
-  steps.push({a:'lead', t:'社長の指示を分析中: 「' + summary + '」',
-    th:'どのメンバーに何を割り振るか検討中…', e:'📋', d:2500, s:'files', n:1});
-  steps.push({a:'lead', t:'アーキテクチャ設計・タスク分割中',
-    th:'全メンバーに作業を分配しよう', e:'📐', d:2500, s:'files', n:2});
+  // 指示内容のカテゴリを判定
+  const cat = detectCategory(text);
 
-  // Phase 2: UIデザイナーがデザイン
-  steps.push({a:'ui-designer', t:'UI/UXデザイン設計中',
-    th:'ユーザー体験を最優先で画面構成を設計', e:'🎨', d:3000, s:'files', n:1});
-  steps.push({a:'ui-designer', t:'スタイリング・レイアウト実装中',
-    th:'カラーパレットとタイポグラフィを統一', e:'🖌️', d:3000, s:'lines', n:Math.floor(Math.random()*100+30)});
+  // ===== Phase 1: リードが設計・タスク分割 =====
+  steps.push({a:'lead', t:'\u793E\u9577\u306E\u6307\u793A\u3092\u53D7\u4ED8: \u300C' + summary + '\u300D',
+    th:cat.leadThink1, e:'\u{1F4CB}', d:2500, s:'files', n:1});
+  steps.push({a:'lead', t:cat.leadDesign,
+    th:'\u5168\u30E1\u30F3\u30D0\u30FC\u306B\u4F5C\u696D\u3092\u5206\u914D\u3057\u307E\u3059', e:'\u{1F4D0}', d:3000, s:'files', n:2});
+  steps.push({a:'lead', t:'\u30BF\u30B9\u30AF\u5206\u5272\u5B8C\u4E86 \u2192 8\u540D\u306B\u4F5C\u696D\u6307\u793A',
+    th:'\u30C7\u30D9\u30ED\u30C3\u30D1\u30FC\u3001UI\u30C7\u30B6\u30A4\u30CA\u30FC\u3001\u30C6\u30B9\u30BF\u30FC\u2026\u5168\u54E1\u52D5\u3051\uFF01', e:'\u{1F4CA}', d:2500, s:'files', n:1});
 
-  // Phase 2: デベロッパーがコア実装
-  steps.push({a:'developer', t:'コア機能の実装開始',
-    th:'設計書に沿って最適な実装を選定中', e:'⌨️', d:3500, s:'lines', n:Math.floor(Math.random()*200+80)});
-  steps.push({a:'developer', t:'機能実装完了 → レビュー依頼',
-    th:'実装できた。レビュアーに回そう', e:'✅', d:2000, s:'files', n:1});
+  // ===== Phase 2: UIデザイナーがデザイン =====
+  steps.push({a:'ui-designer', t:cat.uiDesign,
+    th:cat.uiThink1, e:'\u{1F3A8}', d:3500, s:'files', n:2});
+  steps.push({a:'ui-designer', t:cat.uiImpl,
+    th:cat.uiThink2, e:'\u{1F58C}\uFE0F', d:3000, s:'lines', n:R(80,180)});
 
-  // Phase 3: レビュアーがコードレビュー
-  steps.push({a:'reviewer', t:'コードレビュー開始',
-    th:'設計パターン・命名規則・可読性を確認中', e:'👀', d:3000, s:'files', n:3});
-  steps.push({a:'reviewer', t:'レビュー完了 → 改善点をフィードバック',
-    th:'いくつか改善点あり…開発者に戻そう', e:'📝', d:2500, s:'files', n:1});
+  // ===== Phase 2: デベロッパーがコア実装 =====
+  steps.push({a:'developer', t:cat.devStart,
+    th:cat.devThink1, e:'\u2328\uFE0F', d:4000, s:'lines', n:R(150,350)});
+  steps.push({a:'developer', t:cat.devCore,
+    th:cat.devThink2, e:'\u{1F4BB}', d:3500, s:'lines', n:R(100,250)});
+  steps.push({a:'developer', t:'\u5B9F\u88C5\u5B8C\u4E86 \u2192 \u30EC\u30D3\u30E5\u30FC\u4F9D\u983C',
+    th:'\u30EC\u30D3\u30E5\u30A2\u30FC\u306B\u30B3\u30FC\u30C9\u3092\u56DE\u305D\u3046', e:'\u2705', d:2000, s:'files', n:1});
 
-  // Phase 3: テスターがテスト
-  steps.push({a:'tester', t:'テストケース作成・実行中',
-    th:'正常系・異常系・エッジケースを網羅するぞ', e:'🧪', d:3500, s:'tests', n:Math.floor(Math.random()*8+5)});
+  // ===== Phase 3: レビュアーがレビュー =====
+  steps.push({a:'reviewer', t:cat.reviewStart,
+    th:cat.reviewThink1, e:'\u{1F440}', d:3500, s:'files', n:3});
+  steps.push({a:'reviewer', t:cat.reviewFeedback,
+    th:cat.reviewThink2, e:'\u{1F4DD}', d:3000, s:'files', n:1});
 
-  // Phase 4: デバッガーが問題を検出・修正
-  steps.push({a:'debugger', t:'テスト結果を分析・バグ調査中',
-    th:'テスターのレポートからバグの原因を特定する', e:'🔍', d:3000, s:'bugs', n:Math.floor(Math.random()*2+1)});
-  steps.push({a:'developer', t:'バグ修正パッチを適用中',
-    th:'デバッガーの指摘箇所を修正', e:'🔧', d:2500, s:'lines', n:Math.floor(Math.random()*30+10)});
+  // ===== Phase 3: テスターがテスト =====
+  steps.push({a:'tester', t:cat.testStart,
+    th:cat.testThink1, e:'\u{1F9EA}', d:3500, s:'tests', n:R(5,12)});
+  steps.push({a:'tester', t:cat.testRun,
+    th:cat.testThink2, e:'\u26A1', d:3000, s:'tests', n:R(3,8)});
 
-  // Phase 5: セキュリティが監査
-  steps.push({a:'security', t:'セキュリティ監査: 秘密鍵・個人情報チェック',
-    th:'.envの露出なし、コミット履歴にAPIキーなし…', e:'🛡️', d:3000, s:'files', n:2});
-  steps.push({a:'security', t:'脆弱性スキャン・公開安全性チェック',
-    th:'XSS対策OK、Firebase DBルールOK', e:'🔐', d:2500, s:'tests', n:2});
+  // ===== Phase 4: デバッガーが調査 =====
+  steps.push({a:'debugger', t:cat.debugFind,
+    th:cat.debugThink1, e:'\u{1F50D}', d:3500, s:'bugs', n:R(1,3)});
+  steps.push({a:'debugger', t:cat.debugFix,
+    th:cat.debugThink2, e:'\u{1F41B}', d:3000});
+  steps.push({a:'developer', t:'\u30D0\u30B0\u4FEE\u6B63\u30D1\u30C3\u30C1\u3092\u9069\u7528\u4E2D',
+    th:'\u30C7\u30D0\u30C3\u30AC\u30FC\u306E\u6307\u6458\u7B87\u6240\u3092\u4FEE\u6B63', e:'\u{1F527}', d:2500, s:'lines', n:R(20,60)});
 
-  // Phase 5: QAが最終品質保証
-  steps.push({a:'qa', t:'最終品質チェック: 全機能総点検',
-    th:'全ブラウザ・全デバイスで動作確認', e:'✅', d:3000, s:'tests', n:Math.floor(Math.random()*5+3)});
-  steps.push({a:'qa', t:'品質レポート作成完了',
-    th:'品質基準クリア！自信を持って公開できる', e:'📊', d:2500, s:'files', n:1});
+  // ===== Phase 5: セキュリティ監査 =====
+  steps.push({a:'security', t:cat.secCheck,
+    th:cat.secThink1, e:'\u{1F6E1}\uFE0F', d:3500, s:'files', n:2});
+  steps.push({a:'security', t:cat.secScan,
+    th:cat.secThink2, e:'\u{1F510}', d:3000, s:'tests', n:R(2,4)});
 
-  // Phase 6: リードが完了報告
-  steps.push({a:'lead', t:'全工程完了！社長に報告: 「' + summary + '」対応完了',
-    th:'全メンバーの作業が完了。次の指示をお待ちしています', e:'🎉', d:2000});
+  // ===== Phase 5: QA最終品質保証 =====
+  steps.push({a:'qa', t:cat.qaCheck,
+    th:cat.qaThink1, e:'\u2705', d:3500, s:'tests', n:R(3,8)});
+  steps.push({a:'qa', t:cat.qaReport,
+    th:cat.qaThink2, e:'\u{1F4CA}', d:3000, s:'files', n:1});
+
+  // ===== Phase 6: デプロイ・完了 =====
+  steps.push({a:'developer', t:'\u672C\u756A\u30D3\u30EB\u30C9\u5B9F\u884C\u4E2D',
+    th:'\u6700\u9069\u5316\u5B8C\u4E86\u2026\u30D0\u30F3\u30C9\u30EB\u30B5\u30A4\u30BA\u6700\u5C0F\u5316', e:'\u{1F3D7}\uFE0F', d:2500, s:'files', n:1});
+  steps.push({a:'security', t:'\u30C7\u30D7\u30ED\u30A4\u524D\u6700\u7D42\u30C1\u30A7\u30C3\u30AF',
+    th:'\u610F\u56F3\u3057\u306A\u3044\u30D5\u30A1\u30A4\u30EB\u516C\u958B\u304C\u306A\u3044\u304B\u78BA\u8A8D\u2026OK\uFF01', e:'\u{1F512}', d:2500});
+  steps.push({a:'lead', t:'\u5168\u5DE5\u7A0B\u5B8C\u4E86\uFF01\u793E\u9577\u306B\u5831\u544A: \u300C' + summary + '\u300D\u5BFE\u5FDC\u5B8C\u4E86',
+    th:'\u5168\u30E1\u30F3\u30D0\u30FC\u306E\u4F5C\u696D\u304C\u5B8C\u4E86\u3002\u6B21\u306E\u6307\u793A\u3092\u304A\u5F85\u3061\u3057\u3066\u3044\u307E\u3059', e:'\u{1F389}', d:2000});
 
   return steps;
+}
+
+// 乱数ヘルパー
+function R(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+// 指示テキストからカテゴリ別の会話テンプレートを生成
+function detectCategory(text) {
+  const t = text.toLowerCase();
+
+  // ゲーム系
+  if (/\u30B2\u30FC\u30E0|\u30B7\u30E5\u30FC\u30C6\u30A3\u30F3\u30B0|\u30A2\u30AF\u30B7\u30E7\u30F3|\u30D1\u30BA\u30EB|\u30ED\u30FC\u30B0\u30E9\u30A4\u30AF|RPG|\u5BFE\u6226|\u30AF\u30A4\u30BA|game/i.test(text)) {
+    return {
+      leadThink1: '\u30B2\u30FC\u30E0\u958B\u767A\u304B\u2026Canvas\u3068WebGL\u3069\u3061\u3089\u304C\u6700\u9069\u304B\u691C\u8A0E\u4E2D',
+      leadDesign: '\u30B2\u30FC\u30E0\u30A2\u30FC\u30AD\u30C6\u30AF\u30C1\u30E3\u8A2D\u8A08: \u30EB\u30FC\u30D7\u30FB\u63CF\u753B\u30FB\u5165\u529B\u30FB\u97F3\u58F0',
+      uiDesign: '\u30B2\u30FC\u30E0UI\u8A2D\u8A08: \u30BF\u30A4\u30C8\u30EB\u753B\u9762\u30FB\u30B9\u30B3\u30A2\u8868\u793A\u30FB\u30E1\u30CB\u30E5\u30FC',
+      uiThink1: '\u30D7\u30EC\u30A4\u30E4\u30FC\u304C\u76F4\u611F\u7684\u306B\u64CD\u4F5C\u3067\u304D\u308BUI\u306B\u3057\u305F\u3044',
+      uiImpl: '\u30A8\u30D5\u30A7\u30AF\u30C8\u30FB\u30A2\u30CB\u30E1\u30FC\u30B7\u30E7\u30F3\u5B9F\u88C5\u4E2D',
+      uiThink2: '\u30D1\u30FC\u30C6\u30A3\u30AF\u30EB\u3068\u753B\u9762\u9077\u79FB\u3067\u30EA\u30C3\u30C1\u306A\u6F14\u51FA\u306B',
+      devStart: '\u30B2\u30FC\u30E0\u30A8\u30F3\u30B8\u30F3\u306E\u30B3\u30A2\u5B9F\u88C5\u958B\u59CB',
+      devThink1: '60fps\u56FA\u5B9A\u3067requestAnimationFrame\u4F7F\u304A\u3046',
+      devCore: '\u7269\u7406\u6F14\u7B97\u30FB\u885D\u7A81\u5224\u5B9A\u30FB\u30B2\u30FC\u30E0\u30ED\u30B8\u30C3\u30AF\u5B9F\u88C5\u4E2D',
+      devThink2: '\u5F53\u305F\u308A\u5224\u5B9A\u306E\u7CBE\u5EA6\u304C\u30B2\u30FC\u30E0\u306E\u80B2\u3061\u3092\u6C7A\u3081\u308B\u306A\u2026',
+      reviewStart: '\u30B2\u30FC\u30E0\u30ED\u30B8\u30C3\u30AF\u306E\u30B3\u30FC\u30C9\u30EC\u30D3\u30E5\u30FC\u958B\u59CB',
+      reviewThink1: '\u30D1\u30D5\u30A9\u30FC\u30DE\u30F3\u30B9\u306B\u5F71\u97FF\u3059\u308B\u30DC\u30C8\u30EB\u30CD\u30C3\u30AF\u304C\u306A\u3044\u304B\u78BA\u8A8D',
+      reviewFeedback: '\u30EC\u30D3\u30E5\u30FC\u5B8C\u4E86: \u30DE\u30B8\u30C3\u30AF\u30CA\u30F3\u30D0\u30FC\u3092\u5B9A\u6570\u5316\u3059\u308B\u63D0\u6848',
+      reviewThink2: '\u53EF\u8AAD\u6027\u3092\u4E0A\u3052\u308C\u3070\u4ECA\u5F8C\u306E\u62E1\u5F35\u304C\u697D\u306B\u306A\u308B',
+      testStart: '\u30B2\u30FC\u30E0\u30D7\u30EC\u30A4\u30C6\u30B9\u30C8\u958B\u59CB: \u64CD\u4F5C\u5FDC\u7B54\u30FB\u30B9\u30B3\u30A2\u8A08\u7B97',
+      testThink1: '\u30A8\u30C3\u30B8\u30B1\u30FC\u30B9\u3082\u7DB2\u7F85\u3057\u3066\u304A\u304F\u305E',
+      testRun: '\u30D1\u30D5\u30A9\u30FC\u30DE\u30F3\u30B9\u30C6\u30B9\u30C8: 60fps\u7DAD\u6301\u78BA\u8A8D',
+      testThink2: '\u4F4E\u30B9\u30DA\u30C3\u30AF\u7AEF\u672B\u3067\u3082\u52D5\u4F5C\u78BA\u8A8D\u5B8C\u4E86',
+      debugFind: '\u30C6\u30B9\u30C8\u7D50\u679C\u5206\u6790: \u885D\u7A81\u5224\u5B9A\u306E\u30A8\u30C3\u30B8\u30B1\u30FC\u30B9\u3092\u767A\u898B',
+      debugThink1: '\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u304C\u91CD\u306A\u308B\u7279\u5B9A\u6761\u4EF6\u3067\u8CA2\u901A\u3059\u308B\u30D0\u30B0\u3060',
+      debugFix: '\u539F\u56E0\u7279\u5B9A: \u5883\u754C\u5024\u306E\u4E0D\u7B49\u53F7\u304C\u9006\u3060\u3063\u305F',
+      debugThink2: '\u4FEE\u6B63\u30D1\u30C3\u30C1\u4F5C\u6210\u5B8C\u4E86\u3001\u30C7\u30D9\u30ED\u30C3\u30D1\u30FC\u306B\u6E21\u3059',
+      secCheck: '\u30BB\u30AD\u30E5\u30EA\u30C6\u30A3\u76E3\u67FB: \u30B2\u30FC\u30E0\u30C7\u30FC\u30BF\u306E\u6539\u3056\u3093\u9632\u6B62\u78BA\u8A8D',
+      secThink1: '\u30B9\u30B3\u30A2\u9001\u4FE1\u306E\u30D0\u30EA\u30C7\u30FC\u30B7\u30E7\u30F3\u3092\u30C1\u30A7\u30C3\u30AF\u4E2D',
+      secScan: 'XSS\u30FB\u30A4\u30F3\u30B8\u30A7\u30AF\u30B7\u30E7\u30F3\u8106\u5F31\u6027\u30B9\u30AD\u30E3\u30F3',
+      secThink2: 'innerHTML\u306E\u30A8\u30B9\u30B1\u30FC\u30D7\u51E6\u7406\u78BA\u8A8D\u2026OK',
+      qaCheck: '\u7DCF\u5408\u54C1\u8CEA\u30C1\u30A7\u30C3\u30AF: \u5168\u30D6\u30E9\u30A6\u30B6\u30FB\u5168\u30C7\u30D0\u30A4\u30B9\u3067\u52D5\u4F5C\u78BA\u8A8D',
+      qaThink1: 'Safari\u3068Firefox\u3067\u3082\u554F\u984C\u306A\u304F\u52D5\u4F5C',
+      qaReport: '\u54C1\u8CEA\u30EC\u30DD\u30FC\u30C8\u4F5C\u6210: \u5168\u30C6\u30B9\u30C8\u30D1\u30B9\u3001\u30EA\u30EA\u30FC\u30B9\u53EF\u80FD',
+      qaThink2: '\u54C1\u8CEA\u57FA\u6E96\u30AF\u30EA\u30A2\uFF01\u81EA\u4FE1\u3092\u6301\u3063\u3066\u516C\u958B\u3067\u304D\u308B'
+    };
+  }
+
+  // Webサイト・LP系
+  if (/\u30B5\u30A4\u30C8|\u30DA\u30FC\u30B8|LP|\u30E9\u30F3\u30C7\u30A3\u30F3\u30B0|\u30DB\u30FC\u30E0\u30DA\u30FC\u30B8|\u30DD\u30FC\u30C8\u30D5\u30A9\u30EA\u30AA|\u81EA\u5DF1\u7D39\u4ECB|web|html|site/i.test(text)) {
+    return {
+      leadThink1: 'Web\u30B5\u30A4\u30C8\u958B\u767A\u3060\u306A\u2026\u30EC\u30B9\u30DD\u30F3\u30B7\u30D6\u5BFE\u5FDC\u5FC5\u9808',
+      leadDesign: '\u30B5\u30A4\u30C8\u69CB\u6210\u8A2D\u8A08: \u30BB\u30AF\u30B7\u30E7\u30F3\u69CB\u6210\u30FB\u30CA\u30D3\u30B2\u30FC\u30B7\u30E7\u30F3\u30FB\u30EC\u30B9\u30DD\u30F3\u30B7\u30D6',
+      uiDesign: '\u30C7\u30B6\u30A4\u30F3\u30B7\u30B9\u30C6\u30E0\u69CB\u7BC9: \u30AB\u30E9\u30FC\u30D1\u30EC\u30C3\u30C8\u30FB\u30BF\u30A4\u30DD\u30B0\u30E9\u30D5\u30A3\u30FB\u4F59\u767D',
+      uiThink1: '\u30D5\u30A1\u30FC\u30B9\u30C8\u30D3\u30E5\u30FC\u3067\u60F3\u3044\u304C\u4F1D\u308F\u308B\u30C7\u30B6\u30A4\u30F3\u306B\u3057\u305F\u3044',
+      uiImpl: '\u30EC\u30B9\u30DD\u30F3\u30B7\u30D6CSS\u30FB\u30A2\u30CB\u30E1\u30FC\u30B7\u30E7\u30F3\u5B9F\u88C5\u4E2D',
+      uiThink2: '\u30E2\u30D0\u30A4\u30EB\u30D5\u30A1\u30FC\u30B9\u30C8\u3067\u7D44\u3093\u3067\u3044\u304F',
+      devStart: 'HTML\u30FB\u30BB\u30AF\u30B7\u30E7\u30F3\u69CB\u9020\u306E\u5B9F\u88C5\u958B\u59CB',
+      devThink1: '\u30BB\u30DE\u30F3\u30C6\u30A3\u30C3\u30AFHTML\u3067\u30A2\u30AF\u30BB\u30B7\u30D3\u30EA\u30C6\u30A3\u3082\u610F\u8B58',
+      devCore: '\u30A4\u30F3\u30BF\u30E9\u30AF\u30B7\u30E7\u30F3\u30FB\u30B9\u30E0\u30FC\u30BA\u30B9\u30AF\u30ED\u30FC\u30EB\u5B9F\u88C5\u4E2D',
+      devThink2: 'Intersection Observer\u3067\u30B9\u30AF\u30ED\u30FC\u30EB\u30A2\u30CB\u30E1\u30FC\u30B7\u30E7\u30F3\u3092\u5B9F\u88C5',
+      reviewStart: 'HTML\u69CB\u9020\u30FB\u30BB\u30DE\u30F3\u30C6\u30A3\u30AF\u30B9\u306E\u30EC\u30D3\u30E5\u30FC',
+      reviewThink1: '\u898B\u51FA\u3057\u968E\u5C64\u3068alt\u5C5E\u6027\u304C\u9069\u5207\u304B\u78BA\u8A8D',
+      reviewFeedback: '\u30EC\u30D3\u30E5\u30FC\u5B8C\u4E86: OGP\u30BF\u30B0\u3068meta description\u306E\u8FFD\u52A0\u3092\u63D0\u6848',
+      reviewThink2: 'SEO\u89B3\u70B9\u3067\u3082\u3046\u5C11\u3057\u6539\u5584\u3067\u304D\u308B',
+      testStart: '\u8868\u793A\u30C6\u30B9\u30C8: \u5404\u30BB\u30AF\u30B7\u30E7\u30F3\u306E\u30EC\u30A4\u30A2\u30A6\u30C8\u78BA\u8A8D',
+      testThink1: '\u30EC\u30B9\u30DD\u30F3\u30B7\u30D6\u306E\u30D6\u30EC\u30FC\u30AF\u30DD\u30A4\u30F3\u30C8\u3092\u7DB2\u7F85\u30C6\u30B9\u30C8',
+      testRun: '\u30AF\u30ED\u30B9\u30D6\u30E9\u30A6\u30B6\u30C6\u30B9\u30C8\u5B8C\u4E86',
+      testThink2: 'Chrome\u30FBSafari\u30FBFirefox\u5168\u3066OK',
+      debugFind: '\u30EC\u30A4\u30A2\u30A6\u30C8\u5D29\u308C\u3092\u767A\u898B: \u7279\u5B9A\u753B\u9762\u5E45\u3067\u30C6\u30AD\u30B9\u30C8\u304C\u306F\u307F\u51FA\u3059',
+      debugThink1: 'min-width\u306E\u6307\u5B9A\u304C\u8DB3\u308A\u306A\u3044\u306E\u304C\u539F\u56E0\u3060',
+      debugFix: '\u539F\u56E0\u7279\u5B9A: CSS\u306Eoverflow\u8A2D\u5B9A\u304C\u6B20\u3051\u3066\u3044\u305F',
+      debugThink2: '\u4FEE\u6B63\u30D1\u30C3\u30C1\u4F5C\u6210\u5B8C\u4E86',
+      secCheck: '\u30BB\u30AD\u30E5\u30EA\u30C6\u30A3\u76E3\u67FB: \u500B\u4EBA\u60C5\u5831\u30FB\u79D8\u5BC6\u9375\u306E\u9732\u51FA\u30C1\u30A7\u30C3\u30AF',
+      secThink1: '\u30BD\u30FC\u30B9\u30B3\u30FC\u30C9\u306BAPI\u30AD\u30FC\u3084\u30D1\u30B9\u30EF\u30FC\u30C9\u304C\u306A\u3044\u304B\u78BA\u8A8D\u4E2D',
+      secScan: '\u516C\u958B\u5B89\u5168\u6027\u30C1\u30A7\u30C3\u30AF: \u610F\u56F3\u3057\u306A\u3044\u30D5\u30A1\u30A4\u30EB\u516C\u958B\u306A\u3057',
+      secThink2: '.gitignore\u3082\u6B63\u3057\u304F\u8A2D\u5B9A\u3055\u308C\u3066\u3044\u308B',
+      qaCheck: '\u7DCF\u5408\u54C1\u8CEA: \u30DA\u30FC\u30B8\u901F\u5EA6\u30FB\u30A2\u30AF\u30BB\u30B7\u30D3\u30EA\u30C6\u30A3\u30FB\u30EC\u30B9\u30DD\u30F3\u30B7\u30D6\u78BA\u8A8D',
+      qaThink1: 'Lighthouse\u30B9\u30B3\u30A290\u4EE5\u4E0A\u3092\u78BA\u8A8D',
+      qaReport: '\u54C1\u8CEA\u30EC\u30DD\u30FC\u30C8: \u5168\u30C6\u30B9\u30C8\u30D1\u30B9\u3001\u30EA\u30EA\u30FC\u30B9\u53EF\u80FD',
+      qaThink2: '\u30E2\u30D0\u30A4\u30EB\u30FB\u30C7\u30B9\u30AF\u30C8\u30C3\u30D7\u4E21\u5BFE\u5FDC\u5B8C\u74A7'
+    };
+  }
+
+  // アプリ・ツール系
+  if (/\u30A2\u30D7\u30EA|\u30C4\u30FC\u30EB|\u30C0\u30C3\u30B7\u30E5\u30DC\u30FC\u30C9|\u7BA1\u7406|\u30C1\u30E3\u30C3\u30C8|\u30AB\u30EC\u30F3\u30C0\u30FC|\u8A08\u7B97|TODO|\u30E1\u30E2|app|tool|dashboard/i.test(text)) {
+    return {
+      leadThink1: '\u30A2\u30D7\u30EA\u958B\u767A\u3060\u306A\u2026\u30C7\u30FC\u30BF\u8A2D\u8A08\u304C\u80DD',
+      leadDesign: '\u30A2\u30D7\u30EA\u30A2\u30FC\u30AD\u30C6\u30AF\u30C1\u30E3\u8A2D\u8A08: \u30C7\u30FC\u30BF\u69CB\u9020\u30FBUI\u30D5\u30ED\u30FC\u30FB\u72B6\u614B\u7BA1\u7406',
+      uiDesign: '\u30A2\u30D7\u30EAUI\u8A2D\u8A08: \u753B\u9762\u9077\u79FB\u30FB\u30B3\u30F3\u30DD\u30FC\u30CD\u30F3\u30C8\u8A2D\u8A08',
+      uiThink1: '\u76F4\u611F\u7684\u306A\u64CD\u4F5C\u6027\u3068\u898B\u3084\u3059\u3055\u3092\u4E21\u7ACB\u3055\u305B\u305F\u3044',
+      uiImpl: '\u30B3\u30F3\u30DD\u30FC\u30CD\u30F3\u30C8\u30FB\u30EC\u30A4\u30A2\u30A6\u30C8\u5B9F\u88C5\u4E2D',
+      uiThink2: '\u30C0\u30FC\u30AF\u30E2\u30FC\u30C9\u5BFE\u5FDC\u3082\u5165\u308C\u3066\u304A\u3053\u3046',
+      devStart: '\u30B3\u30A2\u6A5F\u80FD\u306E\u5B9F\u88C5\u958B\u59CB: \u30C7\u30FC\u30BF\u51E6\u7406\u30FB\u72B6\u614B\u7BA1\u7406',
+      devThink1: 'localStorage\u3067\u30C7\u30FC\u30BF\u6C38\u7D9A\u5316\u3092\u5B9F\u88C5',
+      devCore: 'CRUD\u64CD\u4F5C\u30FB\u30D5\u30A3\u30EB\u30BF\u30EA\u30F3\u30B0\u30FB\u30BD\u30FC\u30C8\u5B9F\u88C5\u4E2D',
+      devThink2: '\u30A4\u30D9\u30F3\u30C8\u99C6\u52D5\u3067\u30EA\u30A2\u30AF\u30C6\u30A3\u30D6\u306AUI\u306B',
+      reviewStart: '\u30C7\u30FC\u30BF\u30D5\u30ED\u30FC\u3068\u72B6\u614B\u7BA1\u7406\u306E\u30EC\u30D3\u30E5\u30FC',
+      reviewThink1: '\u30C7\u30FC\u30BF\u306E\u6574\u5408\u6027\u304C\u4FDD\u305F\u308C\u3066\u3044\u308B\u304B\u78BA\u8A8D',
+      reviewFeedback: '\u30EC\u30D3\u30E5\u30FC\u5B8C\u4E86: \u30A8\u30E9\u30FC\u30CF\u30F3\u30C9\u30EA\u30F3\u30B0\u306E\u8FFD\u52A0\u3092\u63D0\u6848',
+      reviewThink2: '\u7570\u5E38\u7CFB\u306E\u51E6\u7406\u3092\u3082\u3046\u5C11\u3057\u624B\u539A\u304F',
+      testStart: '\u6A5F\u80FD\u30C6\u30B9\u30C8: CRUD\u64CD\u4F5C\u306E\u6B63\u5E38\u7CFB\u30FB\u7570\u5E38\u7CFB',
+      testThink1: '\u7A7A\u5165\u529B\u30FB\u7279\u6B8A\u6587\u5B57\u30FB\u5927\u91CF\u30C7\u30FC\u30BF\u3082\u30C6\u30B9\u30C8',
+      testRun: '\u30D1\u30D5\u30A9\u30FC\u30DE\u30F3\u30B9\u30C6\u30B9\u30C8: \u5927\u91CF\u30C7\u30FC\u30BF\u3067\u306E\u5FDC\u7B54\u901F\u5EA6\u78BA\u8A8D',
+      testThink2: '1000\u4EF6\u306E\u30C7\u30FC\u30BF\u3067\u3082\u30B5\u30AF\u30B5\u30AF\u52D5\u304F',
+      debugFind: '\u30C7\u30FC\u30BF\u4FDD\u5B58\u6642\u306E\u30A8\u30C3\u30B8\u30B1\u30FC\u30B9\u3092\u767A\u898B',
+      debugThink1: '\u7279\u6B8A\u6587\u5B57\u304C\u5165\u308B\u3068JSON\u30D1\u30FC\u30B9\u304C\u5931\u6557\u3059\u308B',
+      debugFix: '\u539F\u56E0\u7279\u5B9A: \u30A8\u30B9\u30B1\u30FC\u30D7\u51E6\u7406\u306E\u6B20\u843D',
+      debugThink2: '\u5165\u529B\u30D0\u30EA\u30C7\u30FC\u30B7\u30E7\u30F3\u3092\u8FFD\u52A0\u3059\u308B\u30D1\u30C3\u30C1\u3092\u4F5C\u6210',
+      secCheck: '\u30BB\u30AD\u30E5\u30EA\u30C6\u30A3\u76E3\u67FB: \u30C7\u30FC\u30BF\u4FDD\u8B77\u30FB\u5165\u529B\u30D0\u30EA\u30C7\u30FC\u30B7\u30E7\u30F3',
+      secThink1: 'XSS\u5BFE\u7B56\u306E\u30A8\u30B9\u30B1\u30FC\u30D7\u51E6\u7406\u3092\u78BA\u8A8D\u4E2D',
+      secScan: '\u30C7\u30FC\u30BF\u6F0F\u6D29\u30EA\u30B9\u30AF\u306E\u30B9\u30AD\u30E3\u30F3',
+      secThink2: 'localStorage\u306E\u30C7\u30FC\u30BF\u306B\u6A5F\u5BC6\u60C5\u5831\u304C\u542B\u307E\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D',
+      qaCheck: '\u7DCF\u5408\u54C1\u8CEA: \u30E6\u30FC\u30B6\u30D3\u30EA\u30C6\u30A3\u30FB\u30D1\u30D5\u30A9\u30FC\u30DE\u30F3\u30B9\u30FB\u30A2\u30AF\u30BB\u30B7\u30D3\u30EA\u30C6\u30A3',
+      qaThink1: '\u64CD\u4F5C\u30D5\u30ED\u30FC\u304C\u81EA\u7136\u3067\u8FF7\u308F\u306A\u3044\u304B\u78BA\u8A8D',
+      qaReport: '\u54C1\u8CEA\u30EC\u30DD\u30FC\u30C8: \u5168\u6A5F\u80FD\u554F\u984C\u306A\u3057\u3001\u30EA\u30EA\u30FC\u30B9\u53EF\u80FD',
+      qaThink2: '\u30E6\u30FC\u30B6\u30FC\u4F53\u9A13\u3082\u826F\u597D\u3001\u516C\u958B\u3067\u304D\u308B'
+    };
+  }
+
+  // デフォルト（汎用）
+  return {
+    leadThink1: '\u6307\u793A\u5185\u5BB9\u3092\u5206\u6790\u4E2D\u2026\u6700\u9069\u306A\u30A2\u30D7\u30ED\u30FC\u30C1\u3092\u691C\u8A0E',
+    leadDesign: '\u30A2\u30FC\u30AD\u30C6\u30AF\u30C1\u30E3\u8A2D\u8A08\u30FB\u30BF\u30B9\u30AF\u5206\u5272\u4E2D',
+    uiDesign: 'UI/UX\u30C7\u30B6\u30A4\u30F3\u8A2D\u8A08\u4E2D',
+    uiThink1: '\u30E6\u30FC\u30B6\u30FC\u4F53\u9A13\u3092\u6700\u512A\u5148\u3067\u8A2D\u8A08',
+    uiImpl: '\u30B9\u30BF\u30A4\u30EA\u30F3\u30B0\u30FB\u30EC\u30A4\u30A2\u30A6\u30C8\u5B9F\u88C5\u4E2D',
+    uiThink2: '\u30EC\u30B9\u30DD\u30F3\u30B7\u30D6\u5BFE\u5FDC\u3082\u5FD8\u308C\u305A\u306B',
+    devStart: '\u30B3\u30A2\u6A5F\u80FD\u306E\u5B9F\u88C5\u958B\u59CB',
+    devThink1: '\u8A2D\u8A08\u66F8\u306B\u6CBF\u3063\u3066\u6700\u9069\u306A\u5B9F\u88C5\u3092\u9078\u5B9A\u4E2D',
+    devCore: '\u30ED\u30B8\u30C3\u30AF\u30FB\u30C7\u30FC\u30BF\u51E6\u7406\u5B9F\u88C5\u4E2D',
+    devThink2: '\u30E1\u30F3\u30C6\u30CA\u30F3\u30B9\u6027\u3082\u610F\u8B58\u3057\u3066\u66F8\u304F',
+    reviewStart: '\u30B3\u30FC\u30C9\u30EC\u30D3\u30E5\u30FC\u958B\u59CB',
+    reviewThink1: '\u8A2D\u8A08\u30D1\u30BF\u30FC\u30F3\u30FB\u547D\u540D\u898F\u5247\u30FB\u53EF\u8AAD\u6027\u3092\u78BA\u8A8D\u4E2D',
+    reviewFeedback: '\u30EC\u30D3\u30E5\u30FC\u5B8C\u4E86: \u6539\u5584\u70B9\u3092\u30D5\u30A3\u30FC\u30C9\u30D0\u30C3\u30AF',
+    reviewThink2: '\u5168\u4F53\u7684\u306B\u826F\u3044\u30B3\u30FC\u30C9\u3001\u5C11\u3057\u306E\u8ABF\u6574\u3067\u5B8C\u74A7',
+    testStart: '\u30C6\u30B9\u30C8\u30B1\u30FC\u30B9\u4F5C\u6210\u30FB\u5B9F\u884C\u4E2D',
+    testThink1: '\u6B63\u5E38\u7CFB\u30FB\u7570\u5E38\u7CFB\u30FB\u30A8\u30C3\u30B8\u30B1\u30FC\u30B9\u3092\u7DB2\u7F85',
+    testRun: '\u7D50\u5408\u30C6\u30B9\u30C8\u30FB\u30D1\u30D5\u30A9\u30FC\u30DE\u30F3\u30B9\u30C6\u30B9\u30C8\u5B8C\u4E86',
+    testThink2: '\u5168\u30C6\u30B9\u30C8\u30D1\u30B9\u78BA\u8A8D',
+    debugFind: '\u30C6\u30B9\u30C8\u7D50\u679C\u3092\u5206\u6790\u30FB\u554F\u984C\u7B87\u6240\u3092\u7279\u5B9A',
+    debugThink1: '\u539F\u56E0\u306E\u5207\u308A\u5206\u3051\u4E2D\u2026',
+    debugFix: '\u539F\u56E0\u7279\u5B9A\u30FB\u4FEE\u6B63\u65B9\u91DD\u6C7A\u5B9A',
+    debugThink2: '\u4FEE\u6B63\u30D1\u30C3\u30C1\u4F5C\u6210\u5B8C\u4E86',
+    secCheck: '\u30BB\u30AD\u30E5\u30EA\u30C6\u30A3\u76E3\u67FB: \u79D8\u5BC6\u9375\u30FB\u500B\u4EBA\u60C5\u5831\u30C1\u30A7\u30C3\u30AF',
+    secThink1: '\u30BD\u30FC\u30B9\u30B3\u30FC\u30C9\u306B\u6A5F\u5BC6\u60C5\u5831\u304C\u306A\u3044\u304B\u78BA\u8A8D',
+    secScan: '\u8106\u5F31\u6027\u30B9\u30AD\u30E3\u30F3\u30FB\u516C\u958B\u5B89\u5168\u6027\u30C1\u30A7\u30C3\u30AF',
+    secThink2: '\u30BB\u30AD\u30E5\u30EA\u30C6\u30A3\u554F\u984C\u306A\u3057',
+    qaCheck: '\u6700\u7D42\u54C1\u8CEA\u30C1\u30A7\u30C3\u30AF: \u5168\u6A5F\u80FD\u7DCF\u70B9\u691C',
+    qaThink1: '\u5168\u30D6\u30E9\u30A6\u30B6\u30FB\u5168\u30C7\u30D0\u30A4\u30B9\u3067\u52D5\u4F5C\u78BA\u8A8D',
+    qaReport: '\u54C1\u8CEA\u30EC\u30DD\u30FC\u30C8\u4F5C\u6210: \u30EA\u30EA\u30FC\u30B9\u53EF\u80FD',
+    qaThink2: '\u54C1\u8CEA\u57FA\u6E96\u30AF\u30EA\u30A2\uFF01\u516C\u958B\u3067\u304D\u308B'
+  };
 }
 
 let simQueue = [];
@@ -2220,8 +2384,8 @@ function init() {
   };
 
   // 初期状態: 指示待ち（チャット入力まで何も動かない）
-  addLog('boss', '🧪 Code-Lab 司令室を起動しました');
-  addLog('boss', '💡 チャットに開発指示を入力してください');
+  addLog('boss', '\u{1F9EA} Code-Lab \u53F8\u4EE4\u5BA4\u3092\u8D77\u52D5\u3057\u307E\u3057\u305F');
+  addLog('boss', '\u{1F4A1} \u4F8B: \u300C\u30DD\u30FC\u30C8\u30D5\u30A9\u30EA\u30AA\u30B5\u30A4\u30C8\u3092\u4F5C\u3063\u3066\u300D\u300C\u30B7\u30E5\u30FC\u30C6\u30A3\u30F3\u30B0\u30B2\u30FC\u30E0\u3092\u4F5C\u3063\u3066\u300D\u306A\u3069\u81EA\u7531\u306B\u6307\u793A\u3057\u3066\u304F\u3060\u3055\u3044');
 
   // Start render loop
   requestAnimationFrame(mainLoop);
