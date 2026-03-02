@@ -238,7 +238,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
         <button id="btnDemo" class="active">&#x25B6; デモ</button>
         <button id="btnManual">&#x1F3AF; 手動</button>
         <button id="btnLive">&#x1F4E1; Live</button>
-        <button id="btnSpeed" data-speed="1">1&#xD7;</button>
       </div>
       <!-- Live状態表示（シンプル） -->
       <div id="livePanel">
@@ -1957,14 +1956,6 @@ function init() {
     AGENT_DEFS.forEach(a => { state.agents[a.id].active = true; });
     addLog('boss', '🎯 手動モードに切り替えました');
     updateUI();
-  });
-
-  document.getElementById('btnSpeed').addEventListener('click', () => {
-    const btn = document.getElementById('btnSpeed');
-    const speeds = [1, 2, 4];
-    const currentIdx = speeds.indexOf(state.speed);
-    state.speed = speeds[(currentIdx + 1) % speeds.length];
-    btn.textContent = state.speed + '×';
   });
 
   // Liveモードボタン
