@@ -236,7 +236,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
       <!-- Controls -->
       <div id="controls">
         <button id="btnDemo" class="active">&#x25B6; デモ</button>
-        <button id="btnManual">&#x1F3AF; 手動</button>
         <button id="btnLive">&#x1F4E1; Live</button>
       </div>
       <!-- Live状態表示（シンプル） -->
@@ -307,7 +306,7 @@ const BOSS_POS = {gx:8, gy:8.5};
 // SECTION: STATE
 // ============================================================
 const state = {
-  mode:'demo', // 'demo' or 'manual'
+  mode:'demo', // 'demo' or 'live'
   speed:1,
   phase:1,
   running:false,
@@ -1711,41 +1710,121 @@ function stopDemo() {
 }
 
 // ============================================================
-// SECTION: COMMAND PROCESSING (Manual Mode)
+// SECTION: COMMAND PROCESSING (Interactive Demo)
 // ============================================================
+
+// 指示内容からエージェント連鎖シナリオを生成
+function buildScenario(text) {
+  const lower = text.toLowerCase();
+  const steps = [];
+
+  // 1. リードが常に最初に受け取って分析
+  steps.push({a:'lead', t:'社長の指示を分析中: 「' + text.slice(0,20) + (text.length>20?'…':'') + '」',
+    th:'どのメンバーに割り振るか検討中…', e:'📋', d:2500, s:'files', n:1});
+
+  // 2. キーワードに応じてメイン担当が動く
+  if (lower.match(/実装|コード|ビルド|作成|追加|機能|開発/)) {
+    steps.push({a:'developer', t:'コード実装開始', th:'設計書を確認…最適な実装方法を選定中', e:'⌨️', d:3500, s:'lines', n:Math.floor(Math.random()*200+50)});
+    steps.push({a:'developer', t:'コード実装完了 → テスト依頼', th:'実装できた。テスターに回そう', e:'✅', d:2000});
+    steps.push({a:'tester', t:'実装内容の動作確認中', th:'エッジケースも網羅して確認するぞ', e:'🧪', d:3000, s:'tests', n:Math.floor(Math.random()*5+2)});
+  } else if (lower.match(/テスト|検証|動作確認/)) {
+    steps.push({a:'tester', t:'テストケース作成・実行中', th:'全パターン網羅するぞ', e:'🧪', d:3500, s:'tests', n:Math.floor(Math.random()*8+3)});
+    steps.push({a:'tester', t:'テスト結果レポート作成', th:'結果をまとめてリードに報告', e:'📊', d:2500, s:'files', n:1});
+  } else if (lower.match(/バグ|修正|エラー|不具合|直し/)) {
+    steps.push({a:'debugger', t:'バグの原因を調査中', th:'ログを確認…再現手順を特定するぞ', e:'🔍', d:3000, s:'files', n:2});
+    steps.push({a:'debugger', t:'原因特定 → 修正パッチ作成', th:'原因わかった！ここを直せば解決する', e:'🐛', d:3500, s:'bugs', n:1});
+    steps.push({a:'developer', t:'修正パッチを適用中', th:'デバッガーの指示通りに修正', e:'🔧', d:2500, s:'lines', n:Math.floor(Math.random()*30+10)});
+    steps.push({a:'tester', t:'修正後の回帰テスト', th:'修正で他が壊れてないか確認', e:'🧪', d:2500, s:'tests', n:3});
+  } else if (lower.match(/レビュー|品質|チェック|確認/)) {
+    steps.push({a:'reviewer', t:'コードレビュー開始', th:'設計パターンと命名規則を確認中', e:'👀', d:3500, s:'files', n:3});
+    steps.push({a:'reviewer', t:'レビュー完了 → 改善提案あり', th:'リファクタリングの余地がある…提案書を作ろう', e:'📝', d:2500, s:'files', n:1});
+  } else if (lower.match(/ui|デザイン|スタイル|画面|レイアウト|見た目|色/)) {
+    steps.push({a:'ui-designer', t:'UIデザイン検討中', th:'ユーザー体験を最優先で設計しよう', e:'🎨', d:3000, s:'files', n:1});
+    steps.push({a:'ui-designer', t:'スタイリング実装中', th:'カラーパレットとタイポグラフィを統一', e:'🖌️', d:3500, s:'lines', n:Math.floor(Math.random()*100+30)});
+    steps.push({a:'developer', t:'UI変更をコードに統合', th:'デザイナーの指示通りに反映', e:'⌨️', d:2500, s:'lines', n:Math.floor(Math.random()*50+20)});
+  } else if (lower.match(/セキュリティ|安全|脆弱|漏洩|秘密鍵|個人情報/)) {
+    steps.push({a:'security', t:'セキュリティスキャン開始', th:'.envと.gitignoreの整合性を確認…', e:'🛡️', d:3000, s:'files', n:2});
+    steps.push({a:'security', t:'脆弱性チェック・npm audit実行', th:'依存パッケージの脆弱性を精査中', e:'🔐', d:3500, s:'tests', n:2});
+    steps.push({a:'security', t:'監査レポート作成完了', th:'問題なし！安全に公開できる', e:'✅', d:2500, s:'files', n:1});
+  } else if (lower.match(/デプロイ|公開|リリース|push|アップ/)) {
+    steps.push({a:'security', t:'デプロイ前セキュリティチェック', th:'公開前の最終確認…秘密鍵・個人情報なし', e:'🛡️', d:2500});
+    steps.push({a:'developer', t:'本番ビルド実行中', th:'最適化してバンドルサイズ最小化', e:'🏗️', d:3000, s:'files', n:1});
+    steps.push({a:'developer', t:'デプロイ実行中', th:'GitHub Pagesにデプロイ中…', e:'🚀', d:3500});
+    steps.push({a:'lead', t:'デプロイ完了確認', th:'本番環境で動作確認OK！', e:'✅', d:2500});
+  } else if (lower.match(/qa|品質保証|最終/)) {
+    steps.push({a:'qa', t:'最終品質チェック開始', th:'全機能を総点検するぞ', e:'✅', d:3000, s:'tests', n:5});
+    steps.push({a:'security', t:'公開安全性チェック', th:'リポジトリの公開状態を確認中', e:'🔐', d:2500});
+    steps.push({a:'qa', t:'品質レポート完成', th:'品質基準クリア！', e:'📊', d:2500, s:'files', n:1});
+  } else {
+    // 汎用: リードが分析→開発者が対応
+    steps.push({a:'lead', t:'タスクを整理・分割中', th:'最適なアプローチを検討…', e:'📐', d:2500, s:'files', n:1});
+    steps.push({a:'developer', t:'対応を実施中', th:'社長の要望に沿って作業中', e:'⌨️', d:3500, s:'lines', n:Math.floor(Math.random()*100+30)});
+    steps.push({a:'tester', t:'対応結果を検証中', th:'問題なく動作するか確認', e:'🧪', d:2500, s:'tests', n:2});
+  }
+
+  // 最後: リードが完了報告
+  steps.push({a:'lead', t:'社長に完了報告: 「' + text.slice(0,15) + (text.length>15?'…':'') + '」対応完了',
+    th:'全工程完了。次の指示をお待ちしています', e:'📋', d:2000});
+
+  return steps;
+}
+
+let simQueue = [];
+let simTimer = null;
+
 function simulateResponse(text) {
   addLog('boss', '📢 ' + text);
 
-  // Simple keyword-based agent assignment
-  let agentId = 'lead';
-  const lower = text.toLowerCase();
-  if (lower.includes('実装') || lower.includes('コード') || lower.includes('ビルド')) agentId = 'developer';
-  else if (lower.includes('テスト') || lower.includes('検証')) agentId = 'tester';
-  else if (lower.includes('バグ') || lower.includes('修正') || lower.includes('エラー')) agentId = 'debugger';
-  else if (lower.includes('レビュー') || lower.includes('品質')) agentId = 'reviewer';
-  else if (lower.includes('UI') || lower.includes('デザイン') || lower.includes('スタイル')) agentId = 'ui-designer';
-  else if (lower.includes('セキュリティ') || lower.includes('QA') || lower.includes('確認')) agentId = 'qa';
+  // 自動デモが走っていたら停止
+  stopDemo();
 
-  const ag = state.agents[agentId];
-  // Activate the agent
-  ag.active = true;
-  ag.working = true;
-  ag.action = '「' + text + '」を処理中...';
-  ag.thought = '社長からの指示を確認中...';
+  // 既存のシミュレーションをクリア
+  if (simTimer) { clearTimeout(simTimer); simTimer = null; }
+
+  // シナリオ生成
+  simQueue = buildScenario(text);
+
+  // 全エージェントをアクティブに
+  AGENT_DEFS.forEach(a => { state.agents[a.id].active = true; });
   updateUI();
 
-  spawnParticles(agentId);
-  spawnFloatingEmoji(agentId, '💬');
+  // 連鎖実行開始
+  executeSimStep();
+}
 
-  // Simulate work
-  setTimeout(() => {
-    ag.action = '指示を完了しました';
-    ag.thought = '';
+function executeSimStep() {
+  if (simQueue.length === 0) { simTimer = null; return; }
+
+  const step = simQueue.shift();
+  const ag = state.agents[step.a];
+  if (!ag) { executeSimStep(); return; }
+
+  // エージェント起動
+  ag.working = true;
+  ag.action = step.t;
+  ag.thought = step.th || '';
+  spawnParticles(step.a);
+  spawnFloatingEmoji(step.a, step.e || '💬');
+
+  // ログ
+  const agentDef = AGENT_DEFS.find(a => a.id === step.a);
+  addLog(step.a, step.e + ' ' + step.t);
+
+  // stats更新
+  if (step.s && step.n) {
+    state.stats[step.s] = (state.stats[step.s] || 0) + step.n;
+  }
+
+  updateUI();
+
+  // 次のステップへ
+  const delay = step.d || 3000;
+  simTimer = setTimeout(() => {
     ag.working = false;
-    addLog(agentId, '✅ 「' + text + '」→ 完了');
-    spawnFloatingEmoji(agentId, '✅');
+    setTimeout(() => { ag.thought = ''; }, 1000);
     updateUI();
-  }, 3000 / state.speed);
+    executeSimStep();
+  }, delay);
 }
 
 // ============================================================
@@ -1939,23 +2018,9 @@ function init() {
   // Controls
   document.getElementById('btnDemo').addEventListener('click', () => {
     document.getElementById('btnDemo').classList.add('active');
-    document.getElementById('btnManual').classList.remove('active');
     hideLivePanel();
     stopDemo();
     startDemo();
-  });
-
-  document.getElementById('btnManual').addEventListener('click', () => {
-    document.getElementById('btnManual').classList.add('active');
-    document.getElementById('btnDemo').classList.remove('active');
-    hideLivePanel();
-    stopDemo();
-    state.mode = 'manual';
-    state.running = false;
-    // Activate all agents in manual mode
-    AGENT_DEFS.forEach(a => { state.agents[a.id].active = true; });
-    addLog('boss', '🎯 手動モードに切り替えました');
-    updateUI();
   });
 
   // Liveモードボタン
@@ -1964,9 +2029,9 @@ function init() {
     if (CONNECTION_MODE === 'websocket') {
       disconnectWebSocket();
       CONNECTION_MODE = 'simulation';
-      state.mode = 'manual';
+      state.mode = 'demo';
       document.getElementById('btnLive').classList.remove('active');
-      document.getElementById('btnManual').classList.add('active');
+      document.getElementById('btnDemo').classList.add('active');
       document.getElementById('livePanel').classList.remove('visible');
       addLog('boss', '\u{1F4E1} Liveモードを終了しました');
       AGENT_DEFS.forEach(a => { state.agents[a.id].active = true; });
@@ -1978,7 +2043,6 @@ function init() {
     if (!dir || !dir.trim()) return;
     document.getElementById('btnLive').classList.add('active');
     document.getElementById('btnDemo').classList.remove('active');
-    document.getElementById('btnManual').classList.remove('active');
     stopDemo();
     CONNECTION_MODE = 'websocket';
     state.mode = 'live';
