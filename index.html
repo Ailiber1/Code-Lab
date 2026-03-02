@@ -50,6 +50,17 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 #commandBar button{background:var(--accent);color:#1a1520;border:none;
   border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:14px}
 #commandBar button:hover{filter:brightness(1.15)}
+#btnAttach{background:transparent;color:var(--accent);border:1px solid var(--border);
+  font-size:18px;padding:6px 10px;border-radius:8px;cursor:pointer;line-height:1}
+#btnAttach:hover{background:#ffffff10;border-color:var(--accent)}
+#attachPreview{display:none;align-items:center;gap:6px;padding:4px 12px;
+  background:#ffffff08;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim)}
+#attachPreview.show{display:flex}
+#attachPreview .file-list{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+#attachPreview .file-tag{background:var(--accent);color:#1a1520;padding:2px 8px;
+  border-radius:4px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px}
+#attachPreview .file-tag .remove{cursor:pointer;opacity:0.7;font-size:13px}
+#attachPreview .file-tag .remove:hover{opacity:1}
 
 /* ===== SIDE PANEL ===== */
 #sidePanel{display:flex;flex-direction:column;background:var(--panel);
@@ -186,8 +197,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
         <div class="stat-item"><span class="icon">&#x1F504;</span><span class="val" id="statPhase">1/6</span></div>
       </div>
       <div id="phaseOverlay"><div class="phase-num"></div><div class="phase-name"></div></div>
+      <div id="attachPreview"><div class="file-list" id="fileList"></div></div>
       <div id="commandBar">
         <div class="label">社長&#x25B8;</div>
+        <button id="btnAttach" title="ファイル添付">＋</button>
+        <input type="file" id="fileInput" multiple accept=".md,.txt,.js,.ts,.html,.css,.json,.py,.java,.c,.cpp,.h,.xml,.yaml,.yml,.csv,.sh,.png,.jpg,.jpeg,.gif,.webp,.svg" style="display:none">
         <input type="text" id="cmdInput" placeholder="開発指示を入力してください...">
         <button id="cmdSend">&#x25B6;</button>
       </div>
@@ -320,14 +334,70 @@ const floatingEmojis = [];
 let CONNECTION_MODE = 'simulation'; // 'simulation' | 'websocket'
 let ws = null;
 let liveConnected = false;
+let pendingFiles = []; // 添付ファイル一時保管
 
 function sendCommand(text) {
   if (CONNECTION_MODE === 'websocket' && ws && ws.readyState === WebSocket.OPEN) {
-    addLog('boss', '\u{1F4E2} ' + text);
-    ws.send(JSON.stringify({type:'command', text}));
+    const filesLabel = pendingFiles.length ? ' [+' + pendingFiles.length + 'ファイル]' : '';
+    addLog('boss', '\u{1F4E2} ' + text + filesLabel);
+    const payload = { type: 'command', text };
+    if (pendingFiles.length) {
+      payload.files = pendingFiles.map(f => ({ name: f.name, type: f.type, data: f.data }));
+    }
+    ws.send(JSON.stringify(payload));
+    clearPendingFiles();
   } else {
     simulateResponse(text);
+    clearPendingFiles();
   }
+}
+
+function clearPendingFiles() {
+  pendingFiles = [];
+  const preview = document.getElementById('attachPreview');
+  const fileList = document.getElementById('fileList');
+  if (preview) preview.classList.remove('show');
+  if (fileList) fileList.innerHTML = '';
+}
+
+function addPendingFile(file) {
+  const MAX_SIZE = 5 * 1024 * 1024; // 5MB制限
+  if (file.size > MAX_SIZE) {
+    addLog('boss', '\u274C ファイルが大きすぎます（5MB以下）: ' + file.name);
+    return;
+  }
+  const reader = new FileReader();
+  const isImage = file.type.startsWith('image/');
+  if (isImage) {
+    reader.readAsDataURL(file);
+  } else {
+    reader.readAsText(file);
+  }
+  reader.onload = () => {
+    pendingFiles.push({ name: file.name, type: isImage ? 'image' : 'text', data: reader.result });
+    renderFilePreview();
+  };
+}
+
+function renderFilePreview() {
+  const preview = document.getElementById('attachPreview');
+  const fileList = document.getElementById('fileList');
+  fileList.innerHTML = '';
+  pendingFiles.forEach((f, i) => {
+    const tag = document.createElement('span');
+    tag.className = 'file-tag';
+    const icon = f.type === 'image' ? '\u{1F5BC}' : '\u{1F4C4}';
+    tag.innerHTML = icon + ' ' + f.name + ' <span class="remove" data-idx="' + i + '">\u2715</span>';
+    fileList.appendChild(tag);
+  });
+  preview.classList.toggle('show', pendingFiles.length > 0);
+  // 削除ボタン
+  fileList.querySelectorAll('.remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      pendingFiles.splice(parseInt(e.target.dataset.idx), 1);
+      renderFilePreview();
+    });
+  });
 }
 
 // DevEvent interface (Phase 2 compatible)
@@ -1817,6 +1887,25 @@ function init() {
       cmdInput.value = '';
       sendCommand(text);
     }
+  });
+
+  // ファイル添付ボタン
+  const btnAttach = document.getElementById('btnAttach');
+  const fileInput = document.getElementById('fileInput');
+  btnAttach.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    Array.from(fileInput.files).forEach(f => addPendingFile(f));
+    fileInput.value = '';
+  });
+
+  // ドラッグ＆ドロップ対応（コマンドバー周辺）
+  const commandBar = document.getElementById('commandBar');
+  commandBar.addEventListener('dragover', (e) => { e.preventDefault(); commandBar.style.borderColor = 'var(--accent)'; });
+  commandBar.addEventListener('dragleave', () => { commandBar.style.borderColor = ''; });
+  commandBar.addEventListener('drop', (e) => {
+    e.preventDefault();
+    commandBar.style.borderColor = '';
+    Array.from(e.dataTransfer.files).forEach(f => addPendingFile(f));
   });
 
   // Controls

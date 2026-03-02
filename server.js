@@ -156,10 +156,39 @@ function handleCommand(ws, msg) {
     return;
   }
 
-  const prompt = msg.text;
+  let prompt = msg.text;
   if (!prompt || typeof prompt !== 'string') {
     ws.send(JSON.stringify({ type: 'error', message: 'text is required' }));
     return;
+  }
+
+  // 添付ファイルの処理
+  if (msg.files && Array.isArray(msg.files) && msg.files.length > 0) {
+    const fileParts = [];
+    for (const file of msg.files) {
+      if (file.type === 'text') {
+        // テキストファイル: プロンプトに内容を埋め込み
+        fileParts.push('--- ' + file.name + ' ---\n' + file.data + '\n--- /' + file.name + ' ---');
+      } else if (file.type === 'image') {
+        // 画像ファイル: プロジェクトにBase64から保存しパスで参照
+        try {
+          const uploadDir = path.join(session.projectDir, '.claude-uploads');
+          if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+          const base64Data = file.data.replace(/^data:image\/\w+;base64,/, '');
+          const ext = file.name.split('.').pop() || 'png';
+          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const filePath = path.join(uploadDir, safeName);
+          fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+          fileParts.push('[画像ファイル: ' + filePath + ']');
+          console.log('[FILE] 画像保存:', filePath);
+        } catch (e) {
+          console.error('[FILE] 画像保存エラー:', e.message);
+        }
+      }
+    }
+    if (fileParts.length > 0) {
+      prompt = '以下のファイルが添付されています:\n\n' + fileParts.join('\n\n') + '\n\n---\nユーザーの指示: ' + prompt;
+    }
   }
 
   // Claude CLI 起動引数
