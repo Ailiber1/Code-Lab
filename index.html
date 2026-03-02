@@ -136,6 +136,26 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
   font-family:'JetBrains Mono',monospace}
 #phaseOverlay .phase-name{font-size:22px;font-weight:700;margin-top:8px}
 
+/* ===== LIVE CONTROL PANEL ===== */
+#livePanel{display:none;padding:8px 12px;background:#0d0a12;border-top:1px solid var(--border)}
+#livePanel.visible{display:block}
+#livePanel .live-title{font-size:11px;font-weight:700;color:#4ade80;text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+#livePanel .live-title .dot{width:6px;height:6px;border-radius:50%;background:#666}
+#livePanel .live-title .dot.connected{background:#4ade80;animation:pulse 1.5s infinite}
+#livePanel .live-row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+#livePanel input{flex:1;background:#ffffff08;border:1px solid var(--border);
+  border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;
+  font-family:'JetBrains Mono',monospace;outline:none}
+#livePanel input:focus{border-color:#4ade80}
+#livePanel input::placeholder{color:#ffffff30}
+#livePanel button{padding:4px 10px;border:1px solid #4ade8040;border-radius:6px;
+  background:#4ade8015;color:#4ade80;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+#livePanel button:hover{background:#4ade8025}
+#livePanel button.danger{border-color:#e0687840;background:#e0687815;color:#e06878}
+#livePanel button.danger:hover{background:#e0687825}
+#livePanel .live-status{font-size:11px;color:#ffffff50;margin-top:2px}
+
 /* ===== RESPONSIVE ===== */
 @media(max-width:800px){
   #main{grid-template-columns:1fr}
@@ -199,7 +219,21 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
       <div id="controls">
         <button id="btnDemo" class="active">&#x25B6; デモ</button>
         <button id="btnManual">&#x1F3AF; 手動</button>
+        <button id="btnLive">&#x1F4E1; Live</button>
         <button id="btnSpeed" data-speed="1">1&#xD7;</button>
+        <button id="btnZoomIn" title="ズームイン">&#x1F50D;+</button>
+        <button id="btnZoomOut" title="ズームアウト">&#x1F50D;-</button>
+        <button id="btnZoomReset" title="リセット">&#x21BA;</button>
+      </div>
+      <!-- Live Control Panel -->
+      <div id="livePanel">
+        <div class="live-title"><span class="dot" id="liveDot"></span>Live Mode &#x2014; Claude Code CLI</div>
+        <div class="live-row">
+          <input type="text" id="liveProjectDir" placeholder="プロジェクトパス (例: /tmp/MyApp)">
+          <button id="btnLiveConnect">接続</button>
+          <button id="btnLiveDisconnect" class="danger" style="display:none">中断</button>
+        </div>
+        <div class="live-status" id="liveStatus">未接続</div>
       </div>
     </div>
   </main>
@@ -209,9 +243,16 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 // ============================================================
 // SECTION: CONSTANTS
 // ============================================================
-const TILE_W = 64, TILE_H = 32, Z_SCALE = 30;
+let TILE_W = 64, TILE_H = 32, Z_SCALE = 30;
 const GRID_W = 12, GRID_H = 10;
 let OFFSET_X = 400, OFFSET_Y = 140;
+// タイルサイズの基準値（resizeCanvasで動的計算）
+const BASE_TILE_W = 64, BASE_TILE_H = 32, BASE_Z = 30;
+// ズーム＆パン
+let zoomLevel = 1.0;
+const ZOOM_MIN = 0.5, ZOOM_MAX = 3.0, ZOOM_STEP = 0.1;
+let panOffX = 0, panOffY = 0;
+let isDragging = false, dragStartX = 0, dragStartY = 0, panStartX = 0, panStartY = 0;
 
 const PALETTE = {
   floor:'#e8dcc8', floorAlt:'#ddd0bc',
@@ -289,11 +330,13 @@ const floatingEmojis = [];
 // ============================================================
 // SECTION: CONNECTION INTERFACE (Phase 2 ready)
 // ============================================================
-const CONNECTION_MODE = 'simulation'; // 'simulation' or 'websocket'
+let CONNECTION_MODE = 'simulation'; // 'simulation' | 'websocket'
 let ws = null;
+let liveConnected = false;
 
 function sendCommand(text) {
-  if (CONNECTION_MODE === 'websocket' && ws) {
+  if (CONNECTION_MODE === 'websocket' && ws && ws.readyState === WebSocket.OPEN) {
+    addLog('boss', '\u{1F4E2} ' + text);
     ws.send(JSON.stringify({type:'command', text}));
   } else {
     simulateResponse(text);
@@ -313,6 +356,12 @@ function processDevEvent(ev) {
     const aid = ev.a || ev.agent;
     const ag = state.agents[aid];
     if (ag) {
+      // Liveモード: エージェントを自動アクティベート
+      if (CONNECTION_MODE === 'websocket' && !ag.active) {
+        ag.active = true;
+        ag._justActivated = true;
+        ag._activatedTime = state.time;
+      }
       ag.working = true;
       ag.action = ev.t || ev.action || '';
       ag.thought = ev.th || ev.thought || '';
@@ -353,10 +402,27 @@ function resizeCanvas() {
   const cmdH = cmdBar ? cmdBar.offsetHeight : 44;
   canvas.width = area.clientWidth;
   canvas.height = Math.max(300, area.clientHeight - cmdH);
-  // Center the isometric grid in the canvas
-  // Grid spans roughly 640px wide, 400px tall
-  OFFSET_X = canvas.width * 0.44;
-  OFFSET_Y = Math.max(80, canvas.height * 0.18);
+
+  // グリッドのスクリーン上のサイズ（基準タイルサイズで計算）
+  const gridScreenW = (GRID_W + GRID_H) * BASE_TILE_W / 2; // 704
+  const gridScreenH = (GRID_W + GRID_H) * BASE_TILE_H / 2 + 3.2 * BASE_Z; // 448
+
+  // キャンバスの85%を埋めるようにスケール計算
+  const scaleX = (canvas.width * 0.88) / gridScreenW;
+  const scaleY = (canvas.height * 0.85) / gridScreenH;
+  const scale = Math.min(scaleX, scaleY);
+
+  // タイルサイズを動的に更新（ズーム適用）
+  const zoomedScale = scale * zoomLevel;
+  TILE_W = Math.round(BASE_TILE_W * zoomedScale);
+  TILE_H = Math.round(BASE_TILE_H * zoomedScale);
+  Z_SCALE = Math.round(BASE_Z * zoomedScale);
+
+  // オフセット: グリッドの中心をキャンバスの中心に合わせる（パン適用）
+  const centerIsoX = (GRID_W / 2 - GRID_H / 2) * TILE_W / 2;
+  const centerIsoY = (GRID_W / 2 + GRID_H / 2) * TILE_H / 2 - 1.0 * Z_SCALE;
+  OFFSET_X = canvas.width / 2 - centerIsoX + panOffX;
+  OFFSET_Y = canvas.height / 2 - centerIsoY + panOffY;
 }
 
 function toIso(x, y, z) {
@@ -380,6 +446,9 @@ function rrect(x, y, w, h, r) {
   c.quadraticCurveTo(x, y, x + r, y);
   c.closePath();
 }
+
+// ピクセルスケール係数（タイル拡大に連動）
+function ps(v) { return v * TILE_W / BASE_TILE_W; }
 
 function darken(hex, amt) {
   let r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
@@ -429,7 +498,7 @@ function drawShadow(x, y, rx, ry) {
   const p = toIso(x, y, 0);
   c.fillStyle = 'rgba(0,0,0,0.12)';
   c.beginPath();
-  c.ellipse(p.sx, p.sy + 2, rx, ry, 0, 0, Math.PI * 2);
+  c.ellipse(p.sx, p.sy + ps(2), ps(rx), ps(ry), 0, 0, Math.PI * 2);
   c.fill();
 }
 
@@ -562,50 +631,48 @@ function drawDesk(gx, gy, isBoss) {
 
 function drawMonitor(gx, gy, agentId, isActive) {
   const p = toIso(gx, gy - 0.15, 0.55);
+  const S = ps(1);
   // Stand
   c.fillStyle = '#555';
-  c.fillRect(p.sx - 2, p.sy - 8, 4, 8);
+  c.fillRect(p.sx - S*2, p.sy - S*8, S*4, S*8);
   // Base
   c.fillStyle = '#444';
   c.beginPath();
-  c.ellipse(p.sx, p.sy, 6, 3, 0, 0, Math.PI * 2);
+  c.ellipse(p.sx, p.sy, S*6, S*3, 0, 0, Math.PI * 2);
   c.fill();
   // Screen frame
-  const sw = 24, sh = 16;
-  rrect(p.sx - sw / 2 - 1, p.sy - sh - 10, sw + 2, sh + 2, 2);
+  const sw = S*24, sh = S*16;
+  rrect(p.sx - sw/2 - S, p.sy - sh - S*10, sw + S*2, sh + S*2, S*2);
   c.fillStyle = PALETTE.monitorFrame;
   c.fill();
   // Screen
-  rrect(p.sx - sw / 2, p.sy - sh - 9, sw, sh, 1);
+  rrect(p.sx - sw/2, p.sy - sh - S*9, sw, sh, S);
   if (isActive) {
     c.fillStyle = '#0d1117';
     c.fill();
-    // Code lines
     const t = state.time / 1000;
     c.save();
     c.beginPath();
-    rrect(p.sx - sw / 2, p.sy - sh - 9, sw, sh, 1);
+    rrect(p.sx - sw/2, p.sy - sh - S*9, sw, sh, S);
     c.clip();
     for (let i = 0; i < 6; i++) {
-      const lw = 6 + Math.sin(t + i * 1.3) * 4;
+      const lw = S*(6 + Math.sin(t + i * 1.3) * 4);
       const agent = AGENT_DEFS.find(a => a.id === agentId);
       c.fillStyle = agent ? agent.color + '80' : '#5cc87880';
-      c.fillRect(p.sx - sw / 2 + 2, p.sy - sh - 7 + i * 2.5, lw, 1.5);
+      c.fillRect(p.sx - sw/2 + S*2, p.sy - sh - S*7 + i * S*2.5, lw, S*1.5);
     }
-    // Cursor blink
     if (Math.sin(t * 4) > 0) {
       c.fillStyle = '#fff';
-      c.fillRect(p.sx - sw / 2 + 2 + 8, p.sy - sh - 7 + 2, 1, 2);
+      c.fillRect(p.sx - sw/2 + S*10, p.sy - sh - S*5, S, S*2);
     }
     c.restore();
   } else {
-    // Screensaver - dark with moving dot
     c.fillStyle = '#111118';
     c.fill();
     const t2 = state.time / 2000;
     c.fillStyle = '#333355';
     c.beginPath();
-    c.arc(p.sx + Math.sin(t2) * 6, p.sy - sh / 2 - 5 + Math.cos(t2 * 1.3) * 4, 2, 0, Math.PI * 2);
+    c.arc(p.sx + Math.sin(t2) * S*6, p.sy - sh/2 - S*5 + Math.cos(t2*1.3) * S*4, S*2, 0, Math.PI*2);
     c.fill();
   }
 }
@@ -617,7 +684,7 @@ function drawChair(gx, gy, isBoss) {
   // Chair base / wheels
   c.fillStyle = '#555';
   c.beginPath();
-  c.ellipse(p.sx, p.sy + 2, 8, 4, 0, 0, Math.PI * 2);
+  c.ellipse(p.sx, p.sy + ps(2), ps(8), ps(4), 0, 0, Math.PI * 2);
   c.fill();
   // Seat
   drawIsoBox(gx - sw / 2, gy + 0.35 - sw / 2, seatH - 0.04, sw, sw, 0.04,
@@ -657,32 +724,28 @@ function drawBookshelf(gx, gy) {
 }
 
 function drawPlant(gx, gy) {
-  const p = toIso(gx, gy, 0);
+  const S = ps(1);
   drawShadow(gx, gy, 10, 5);
-  // Pot
   drawIsoBox(gx - 0.15, gy - 0.15, 0, 0.3, 0.3, 0.35, '#b5651d', '#a0571a', '#8b4a15');
-  // Soil
   drawIsoBox(gx - 0.12, gy - 0.12, 0.35, 0.24, 0.24, 0.03, '#5a3e2b', '#4d3425', '#3f2a1e');
-  // Leaves
   const t = state.time / 1500;
   const leaf = toIso(gx, gy, 0.55);
   c.save();
-  const sway = Math.sin(t) * 2;
+  const sway = Math.sin(t) * 2*S;
   for (let i = 0; i < 5; i++) {
     const angle = (i / 5) * Math.PI * 2 + t * 0.3;
-    const lx = leaf.sx + Math.cos(angle) * (10 + Math.sin(t + i) * 2) + sway;
-    const ly = leaf.sy + Math.sin(angle) * 5 - 5;
+    const lx = leaf.sx + Math.cos(angle) * S*(10 + Math.sin(t + i) * 2) + sway;
+    const ly = leaf.sy + Math.sin(angle) * 5*S - 5*S;
     c.fillStyle = i % 2 === 0 ? '#4a9e5c' : '#3d8a4e';
     c.beginPath();
-    c.ellipse(lx, ly, 7, 4, angle, 0, Math.PI * 2);
+    c.ellipse(lx, ly, 7*S, 4*S, angle, 0, Math.PI * 2);
     c.fill();
   }
-  // Stem
   c.strokeStyle = '#3d7a3e';
-  c.lineWidth = 1.5;
+  c.lineWidth = 1.5*S;
   c.beginPath();
-  c.moveTo(leaf.sx, leaf.sy + 8);
-  c.lineTo(leaf.sx + sway * 0.3, leaf.sy - 4);
+  c.moveTo(leaf.sx, leaf.sy + 8*S);
+  c.lineTo(leaf.sx + sway * 0.3, leaf.sy - 4*S);
   c.stroke();
   c.restore();
 }
@@ -865,74 +928,87 @@ function drawWallClock(gx, gy) {
 function drawCharacter(agentDef, gx, gy, isActive, isBoss) {
   const ag = state.agents[agentDef.id];
   const t = state.time / 1000;
-  const bobY = (isActive && ag && ag.working) ? Math.sin(t * 3 + gx) * 1.2 : 0;
-  const p = toIso(gx, gy + 0.15, 0.35);
+  const S = ps(1);
+  const bobY = (isActive && ag && ag.working) ? Math.sin(t * 3 + gx) * S*1.2 : 0;
+  // 椅子の座面位置に合わせる (gy+0.35 = 椅子のy, z=0.32 = 座面の高さ)
+  const p = toIso(gx, gy + 0.35, 0.32);
   const sx = p.sx, sy = p.sy + bobY;
-  const scale = isBoss ? 1.15 : 1;
+  const sc = (isBoss ? 1.3 : 1.15) * S;
 
-  // Brightness
   const alpha = isActive ? 1.0 : 0.4;
   c.globalAlpha = alpha;
+
+  // Legs (pants) — 座った脚
+  c.fillStyle = '#3d4050';
+  c.fillRect(sx - 6*sc, sy - 4*sc, 5*sc, 6*sc);
+  c.fillRect(sx + 1*sc, sy - 4*sc, 5*sc, 6*sc);
+  // Shoes
+  c.fillStyle = '#2a2a2a';
+  c.fillRect(sx - 7*sc, sy + 2*sc, 6*sc, 2.5*sc);
+  c.fillRect(sx + 1*sc, sy + 2*sc, 6*sc, 2.5*sc);
 
   // Body (shirt)
   const shirtColor = isBoss ? '#2d3748' : agentDef.shirt;
   c.fillStyle = shirtColor;
-  rrect(sx - 8 * scale, sy - 18 * scale, 16 * scale, 14 * scale, 3);
+  rrect(sx - 9*sc, sy - 20*sc, 18*sc, 17*sc, 3*S);
   c.fill();
 
-  // Arms (typing animation)
+  // Arms
   c.fillStyle = shirtColor;
-  const armWave = (isActive && ag && ag.working) ? Math.sin(t * 6 + gx * 2) * 2 : 0;
-  // Left arm
-  c.fillRect(sx - 12 * scale, sy - 14 * scale + armWave, 5 * scale, 4 * scale);
-  // Right arm
-  c.fillRect(sx + 7 * scale, sy - 14 * scale - armWave, 5 * scale, 4 * scale);
-  // Hands (skin)
+  const armWave = (isActive && ag && ag.working) ? Math.sin(t * 6 + gx * 2) * 2*S : 0;
+  c.fillRect(sx - 14*sc, sy - 16*sc + armWave, 6*sc, 5*sc);
+  c.fillRect(sx + 8*sc, sy - 16*sc - armWave, 6*sc, 5*sc);
+  // Hands
   c.fillStyle = '#f0d0b0';
-  c.beginPath();
-  c.arc(sx - 13 * scale, sy - 12 * scale + armWave, 2.5 * scale, 0, Math.PI * 2);
-  c.fill();
-  c.beginPath();
-  c.arc(sx + 13 * scale, sy - 12 * scale - armWave, 2.5 * scale, 0, Math.PI * 2);
-  c.fill();
+  c.beginPath(); c.arc(sx - 15*sc, sy - 13*sc + armWave, 3*sc, 0, Math.PI*2); c.fill();
+  c.beginPath(); c.arc(sx + 15*sc, sy - 13*sc - armWave, 3*sc, 0, Math.PI*2); c.fill();
+
+  // Neck
+  c.fillStyle = '#f0d0b0';
+  c.fillRect(sx - 2.5*sc, sy - 22*sc, 5*sc, 4*sc);
 
   // Head
   c.fillStyle = '#f0d0b0';
-  c.beginPath();
-  c.arc(sx, sy - 24 * scale, 7 * scale, 0, Math.PI * 2);
-  c.fill();
+  c.beginPath(); c.arc(sx, sy - 27*sc, 8*sc, 0, Math.PI*2); c.fill();
 
-  // Hair (back of head - facing away)
+  // Hair
   c.fillStyle = isBoss ? '#1a1a2e' : '#3d2817';
-  c.beginPath();
-  c.arc(sx, sy - 25 * scale, 7 * scale, -Math.PI, 0);
-  c.fill();
-  // Side hair
-  c.fillRect(sx - 7 * scale, sy - 27 * scale, 2 * scale, 6 * scale);
-  c.fillRect(sx + 5 * scale, sy - 27 * scale, 2 * scale, 6 * scale);
+  c.beginPath(); c.arc(sx, sy - 28*sc, 8*sc, -Math.PI, 0); c.fill();
+  c.fillRect(sx - 8*sc, sy - 30*sc, 2.5*sc, 7*sc);
+  c.fillRect(sx + 5.5*sc, sy - 30*sc, 2.5*sc, 7*sc);
+
+  // Eyes
+  c.fillStyle = '#333';
+  c.beginPath(); c.arc(sx - 3*sc, sy - 27*sc, 1.2*sc, 0, Math.PI*2); c.fill();
+  c.beginPath(); c.arc(sx + 3*sc, sy - 27*sc, 1.2*sc, 0, Math.PI*2); c.fill();
 
   if (isBoss) {
-    // Gold necktie hint (visible from back as collar detail)
+    // ネクタイ
     c.fillStyle = '#c8973e';
-    c.fillRect(sx - 2, sy - 18 * scale, 4, 3);
+    c.fillRect(sx - 2*S, sy - 20*sc, 4*S, 8*S);
+    // ネクタイ先端
+    c.beginPath();
+    c.moveTo(sx - 2.5*S, sy - 12*sc);
+    c.lineTo(sx, sy - 8*sc);
+    c.lineTo(sx + 2.5*S, sy - 12*sc);
+    c.closePath();
+    c.fill();
   }
 
   c.globalAlpha = 1;
 
-  // Role tag (always visible)
-  drawRoleTag(sx, sy - 36 * scale, agentDef, isActive, isBoss);
+  drawRoleTag(sx, sy - 42*sc, agentDef, isActive, isBoss);
 
-  // Thought bubble (only when active and has thought)
   if (isActive && ag && ag.thought) {
-    drawThoughtBubble(sx, sy - 50 * scale, ag.thought, agentDef.color);
+    drawThoughtBubble(sx, sy - 56*sc, ag.thought, agentDef.color);
   }
 
-  // Confirm waiting icon
+  // Confirm icon
   if (state.confirmQueue.some(cq => cq.from === agentDef.id)) {
     const blinkAlpha = Math.sin(t * 4) > 0 ? 1 : 0.3;
     c.globalAlpha = blinkAlpha;
-    c.font = '14px sans-serif';
-    c.fillText('📩', sx + 12, sy - 40 * scale);
+    c.font = Math.round(14*S) + 'px sans-serif';
+    c.fillText('\u{1F4E9}', sx + 14*S, sy - 46*sc);
     c.globalAlpha = 1;
   }
 
@@ -941,10 +1017,10 @@ function drawCharacter(agentDef, gx, gy, isActive, isBoss) {
     const glowAlpha = Math.max(0, 1 - (state.time - ag._activatedTime) / 2000);
     if (glowAlpha > 0) {
       c.strokeStyle = agentDef.color;
-      c.lineWidth = 2;
+      c.lineWidth = 2*S;
       c.globalAlpha = glowAlpha * 0.6;
       c.beginPath();
-      c.ellipse(sx, sy - 8, 20 + glowAlpha * 10, 12 + glowAlpha * 5, 0, 0, Math.PI * 2);
+      c.ellipse(sx, sy - 12*S, S*(24 + glowAlpha*10), S*(14 + glowAlpha*5), 0, 0, Math.PI*2);
       c.stroke();
       c.globalAlpha = 1;
     } else {
@@ -954,72 +1030,74 @@ function drawCharacter(agentDef, gx, gy, isActive, isBoss) {
 }
 
 function drawRoleTag(sx, sy, agentDef, isActive, isBoss) {
-  const label = isBoss ? '👑 社長' : agentDef.emoji + ' ' + agentDef.name;
-  c.font = '600 10px "Noto Sans JP", sans-serif';
+  const S = ps(1);
+  const label = isBoss ? '\u{1F451} 社長' : agentDef.emoji + ' ' + agentDef.name;
+  const fontSize = Math.max(9, Math.round(10 * S));
+  c.font = '600 ' + fontSize + 'px "Noto Sans JP", sans-serif';
   const tw = c.measureText(label).width;
-  const px = 6, py = 3;
+  const px = 6*S, py = 3*S;
   const tagAlpha = isActive ? 0.95 : 0.4;
   c.globalAlpha = tagAlpha;
   const bgColor = isBoss ? '#c8973e' : agentDef.color;
   c.fillStyle = bgColor;
-  rrect(sx - tw / 2 - px, sy - py - 10, tw + px * 2, 14 + py, 7);
+  rrect(sx - tw/2 - px, sy - py - 10*S, tw + px*2, 14*S + py, 7*S);
   c.fill();
   c.fillStyle = '#fff';
   c.textAlign = 'center';
   c.textBaseline = 'middle';
-  c.fillText(label, sx, sy - 6);
+  c.fillText(label, sx, sy - 6*S);
   c.textAlign = 'start';
   c.textBaseline = 'alphabetic';
   c.globalAlpha = 1;
 }
 
 function drawThoughtBubble(sx, sy, text, borderColor) {
-  c.font = '500 10px "Noto Sans JP", sans-serif';
-  // Truncate text
+  const S = ps(1);
+  const fontSize = Math.max(9, Math.round(10 * S));
+  c.font = '500 ' + fontSize + 'px "Noto Sans JP", sans-serif';
+  const maxW = 140 * S;
   let displayText = text;
-  if (c.measureText(text).width > 140) {
-    while (c.measureText(displayText + '…').width > 140 && displayText.length > 0) {
+  if (c.measureText(text).width > maxW) {
+    while (c.measureText(displayText + '…').width > maxW && displayText.length > 0) {
       displayText = displayText.slice(0, -1);
     }
     displayText += '…';
   }
   const tw = c.measureText(displayText).width;
-  const px = 8, py = 5;
-  const bw = tw + px * 2;
-  const bh = 18 + py;
-  const bx = sx - bw / 2;
-  const by = sy - bh - 8;
+  const px = 8*S, py = 5*S;
+  const bw = tw + px*2;
+  const bh = 18*S + py;
+  const bx = sx - bw/2;
+  const by = sy - bh - 8*S;
 
-  // Bubble
   c.fillStyle = 'rgba(255,255,255,0.95)';
-  rrect(bx, by, bw, bh, 6);
+  rrect(bx, by, bw, bh, 6*S);
   c.fill();
   c.strokeStyle = borderColor;
-  c.lineWidth = 1.5;
-  rrect(bx, by, bw, bh, 6);
+  c.lineWidth = 1.5*S;
+  rrect(bx, by, bw, bh, 6*S);
   c.stroke();
 
   // Tail
   c.fillStyle = 'rgba(255,255,255,0.95)';
   c.beginPath();
-  c.moveTo(sx - 4, by + bh);
-  c.lineTo(sx, by + bh + 6);
-  c.lineTo(sx + 4, by + bh);
+  c.moveTo(sx - 4*S, by + bh);
+  c.lineTo(sx, by + bh + 6*S);
+  c.lineTo(sx + 4*S, by + bh);
   c.closePath();
   c.fill();
   c.beginPath();
-  c.moveTo(sx - 4, by + bh - 0.5);
-  c.lineTo(sx, by + bh + 6);
-  c.lineTo(sx + 4, by + bh - 0.5);
+  c.moveTo(sx - 4*S, by + bh - 0.5);
+  c.lineTo(sx, by + bh + 6*S);
+  c.lineTo(sx + 4*S, by + bh - 0.5);
   c.strokeStyle = borderColor;
-  c.lineWidth = 1.5;
+  c.lineWidth = 1.5*S;
   c.stroke();
 
-  // Text
   c.fillStyle = '#333';
   c.textAlign = 'center';
   c.textBaseline = 'middle';
-  c.fillText(displayText, sx, by + bh / 2);
+  c.fillText(displayText, sx, by + bh/2);
   c.textAlign = 'start';
   c.textBaseline = 'alphabetic';
 }
@@ -1163,18 +1241,29 @@ function draw() {
     // Whiteboard
     drawables.push({y: 5.8, z: 0, draw: () => drawWhiteboard(9.5, 5.5)});
 
-    // Agent workstations
+    // Agent workstations（モニター→デスク→椅子→キャラの奥→手前順で描画）
     AGENT_DEFS.forEach(agentDef => {
       const pos = AGENT_POS[agentDef.id];
       const isActive = state.agents[agentDef.id].active;
+      // モニター（奥側）
       drawables.push({
-        y: pos.gy + 0.4,
+        y: pos.gy - 0.2,
+        z: 0,
+        draw: () => drawMonitor(pos.gx, pos.gy, agentDef.id, isActive)
+      });
+      // デスク
+      drawables.push({
+        y: pos.gy,
+        z: 0,
+        draw: () => drawDesk(pos.gx, pos.gy, false)
+      });
+      // 椅子＋キャラ（手前側）
+      drawables.push({
+        y: pos.gy + 0.5,
         z: 0,
         draw: () => {
-          drawDesk(pos.gx, pos.gy, false);
           drawChair(pos.gx, pos.gy, false);
           drawCharacter(agentDef, pos.gx, pos.gy, isActive, false);
-          drawMonitor(pos.gx, pos.gy, agentDef.id, isActive);
         }
       });
     });
@@ -1182,13 +1271,21 @@ function draw() {
     // Boss workstation
     const bossAgent = {id:'boss', name:'社長', role:'最高責任者', color:'#c8973e', shirt:'#2d3748', emoji:'👑'};
     drawables.push({
-      y: BOSS_POS.gy + 0.4,
+      y: BOSS_POS.gy - 0.2,
+      z: 0,
+      draw: () => drawMonitor(BOSS_POS.gx, BOSS_POS.gy, 'boss', true)
+    });
+    drawables.push({
+      y: BOSS_POS.gy,
+      z: 0,
+      draw: () => drawDesk(BOSS_POS.gx, BOSS_POS.gy, true)
+    });
+    drawables.push({
+      y: BOSS_POS.gy + 0.5,
       z: 0,
       draw: () => {
-        drawDesk(BOSS_POS.gx, BOSS_POS.gy, true);
         drawChair(BOSS_POS.gx, BOSS_POS.gy, true);
         drawCharacter(bossAgent, BOSS_POS.gx, BOSS_POS.gy, true, true);
-        drawMonitor(BOSS_POS.gx, BOSS_POS.gy, 'boss', true);
       }
     });
 
@@ -1652,6 +1749,129 @@ function mainLoop(timestamp) {
 }
 
 // ============================================================
+// SECTION: WEBSOCKET CONNECTION MANAGEMENT (Live Mode)
+// ============================================================
+function connectWebSocket(projectDir) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    disconnectWebSocket();
+  }
+
+  const wsUrl = 'ws://localhost:3456';
+  updateLiveStatus('connecting', '接続中...');
+
+  try {
+    ws = new WebSocket(wsUrl);
+  } catch (e) {
+    updateLiveStatus('error', '接続失敗: ' + e.message);
+    return;
+  }
+
+  ws.onopen = () => {
+    // プロジェクトディレクトリを送信
+    ws.send(JSON.stringify({ type: 'connect', projectDir }));
+  };
+
+  ws.onmessage = (event) => {
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch { return; }
+    handleServerMessage(msg);
+  };
+
+  ws.onclose = (event) => {
+    liveConnected = false;
+    updateLiveStatus('disconnected', '切断 (code: ' + event.code + ')');
+    addLog('boss', '\u{1F4E1} サーバーとの接続が切断されました');
+    ws = null;
+  };
+
+  ws.onerror = () => {
+    updateLiveStatus('error', '接続エラー \u2014 サーバーが起動しているか確認してください');
+  };
+}
+
+function disconnectWebSocket() {
+  if (ws) {
+    // 実行中のコマンドを中断
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'abort' }));
+    }
+    ws.close();
+    ws = null;
+  }
+  liveConnected = false;
+  updateLiveStatus('disconnected', '未接続');
+  // 全エージェントをアイドルに
+  AGENT_DEFS.forEach(a => {
+    state.agents[a.id].working = false;
+    state.agents[a.id].action = '';
+    state.agents[a.id].thought = '';
+  });
+  updateUI();
+}
+
+function handleServerMessage(msg) {
+  switch (msg.type) {
+    case 'connected':
+      liveConnected = true;
+      updateLiveStatus('connected', '\u2705 接続完了: ' + msg.projectDir);
+      addLog('boss', '\u{1F4E1} プロジェクトに接続: ' + msg.projectDir);
+      // 全エージェントをスタンバイ状態に
+      AGENT_DEFS.forEach(a => { state.agents[a.id].active = true; });
+      updateUI();
+      break;
+
+    case 'dev_event':
+      if (msg.event) {
+        processDevEvent(msg.event);
+      }
+      break;
+
+    case 'command_done':
+      // コマンド完了: エージェントのworkingを解除
+      setTimeout(() => {
+        AGENT_DEFS.forEach(a => {
+          const ag = state.agents[a.id];
+          ag.working = false;
+          ag.thought = '';
+        });
+        updateUI();
+      }, 1500);
+      break;
+
+    case 'error':
+      addLog('boss', '\u274C エラー: ' + (msg.message || '不明なエラー'));
+      updateLiveStatus('error', msg.message || 'エラー');
+      break;
+  }
+}
+
+function updateLiveStatus(status, text) {
+  const dot = document.getElementById('liveDot');
+  const label = document.getElementById('liveStatus');
+  const btnConnect = document.getElementById('btnLiveConnect');
+  const btnDisconnect = document.getElementById('btnLiveDisconnect');
+
+  if (label) label.textContent = text;
+
+  if (dot) {
+    dot.className = 'dot';
+    if (status === 'connected') dot.classList.add('connected');
+  }
+
+  if (btnConnect && btnDisconnect) {
+    if (status === 'connected') {
+      btnConnect.style.display = 'none';
+      btnDisconnect.style.display = '';
+    } else {
+      btnConnect.style.display = '';
+      btnDisconnect.style.display = 'none';
+    }
+  }
+}
+
+// ============================================================
 // SECTION: INIT
 // ============================================================
 function init() {
@@ -1663,6 +1883,103 @@ function init() {
 
   // Event listeners
   window.addEventListener('resize', resizeCanvas);
+
+  // ズーム（マウスホイール）
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    const oldZoom = zoomLevel;
+    zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomLevel + delta));
+    if (zoomLevel !== oldZoom) {
+      // ズーム中心をマウス位置にする
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const zoomRatio = zoomLevel / oldZoom;
+      panOffX = mx - zoomRatio * (mx - panOffX);
+      panOffY = my - zoomRatio * (my - panOffY);
+      resizeCanvas();
+    }
+  }, {passive: false});
+
+  // パン（マウスドラッグ）
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 0) {
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      panStartX = panOffX;
+      panStartY = panOffY;
+      canvas.style.cursor = 'grabbing';
+    }
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    panOffX = panStartX + (e.clientX - dragStartX);
+    panOffY = panStartY + (e.clientY - dragStartY);
+    resizeCanvas();
+  });
+  window.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      canvas.style.cursor = 'grab';
+    }
+  });
+  canvas.style.cursor = 'grab';
+
+  // タッチ操作（ピンチズーム＆パン）
+  let lastTouchDist = 0, lastTouchMid = null;
+  canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      lastTouchDist = Math.hypot(dx, dy);
+      lastTouchMid = {
+        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+      };
+    } else if (e.touches.length === 1) {
+      isDragging = true;
+      dragStartX = e.touches[0].clientX;
+      dragStartY = e.touches[0].clientY;
+      panStartX = panOffX;
+      panStartY = panOffY;
+    }
+  }, {passive: false});
+  canvas.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2 && lastTouchDist > 0) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      const scale = dist / lastTouchDist;
+      const oldZoom = zoomLevel;
+      zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomLevel * scale));
+      lastTouchDist = dist;
+      const mid = {
+        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+      };
+      const rect = canvas.getBoundingClientRect();
+      const mx = mid.x - rect.left;
+      const my = mid.y - rect.top;
+      const zoomRatio = zoomLevel / oldZoom;
+      panOffX = mx - zoomRatio * (mx - panOffX);
+      panOffY = my - zoomRatio * (my - panOffY);
+      lastTouchMid = mid;
+      resizeCanvas();
+    } else if (e.touches.length === 1 && isDragging) {
+      panOffX = panStartX + (e.touches[0].clientX - dragStartX);
+      panOffY = panStartY + (e.touches[0].clientY - dragStartY);
+      resizeCanvas();
+    }
+  }, {passive: false});
+  canvas.addEventListener('touchend', () => {
+    isDragging = false;
+    lastTouchDist = 0;
+    lastTouchMid = null;
+  });
 
   // Command bar
   const cmdInput = document.getElementById('cmdInput');
@@ -1686,6 +2003,7 @@ function init() {
   document.getElementById('btnDemo').addEventListener('click', () => {
     document.getElementById('btnDemo').classList.add('active');
     document.getElementById('btnManual').classList.remove('active');
+    hideLivePanel();
     stopDemo();
     startDemo();
   });
@@ -1693,6 +2011,7 @@ function init() {
   document.getElementById('btnManual').addEventListener('click', () => {
     document.getElementById('btnManual').classList.add('active');
     document.getElementById('btnDemo').classList.remove('active');
+    hideLivePanel();
     stopDemo();
     state.mode = 'manual';
     state.running = false;
@@ -1708,6 +2027,65 @@ function init() {
     const currentIdx = speeds.indexOf(state.speed);
     state.speed = speeds[(currentIdx + 1) % speeds.length];
     btn.textContent = state.speed + '×';
+  });
+
+  // Liveモードボタン
+  document.getElementById('btnLive').addEventListener('click', () => {
+    document.getElementById('btnLive').classList.add('active');
+    document.getElementById('btnDemo').classList.remove('active');
+    document.getElementById('btnManual').classList.remove('active');
+    stopDemo();
+    CONNECTION_MODE = 'websocket';
+    state.mode = 'live';
+    state.running = false;
+    // Liveコントロールパネル表示
+    document.getElementById('livePanel').classList.add('visible');
+    addLog('boss', '\u{1F4E1} Liveモードに切り替えました');
+    // 全エージェントをスタンバイ
+    AGENT_DEFS.forEach(a => { state.agents[a.id].active = false; state.agents[a.id].working = false; });
+    updateUI();
+  });
+
+  // デモ/手動ボタンでLiveパネル非表示
+  const hideLivePanel = () => {
+    document.getElementById('livePanel').classList.remove('visible');
+    document.getElementById('btnLive').classList.remove('active');
+    if (CONNECTION_MODE === 'websocket') {
+      disconnectWebSocket();
+      CONNECTION_MODE = 'simulation';
+    }
+  };
+
+  // Live接続ボタン
+  document.getElementById('btnLiveConnect').addEventListener('click', () => {
+    const dir = document.getElementById('liveProjectDir').value.trim();
+    if (!dir) { alert('プロジェクトパスを入力してください'); return; }
+    connectWebSocket(dir);
+  });
+  document.getElementById('btnLiveDisconnect').addEventListener('click', () => {
+    disconnectWebSocket();
+  });
+  // Enter で接続
+  document.getElementById('liveProjectDir').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      document.getElementById('btnLiveConnect').click();
+    }
+  });
+
+  // ズームボタン
+  document.getElementById('btnZoomIn').addEventListener('click', () => {
+    zoomLevel = Math.min(ZOOM_MAX, zoomLevel + ZOOM_STEP * 2);
+    resizeCanvas();
+  });
+  document.getElementById('btnZoomOut').addEventListener('click', () => {
+    zoomLevel = Math.max(ZOOM_MIN, zoomLevel - ZOOM_STEP * 2);
+    resizeCanvas();
+  });
+  document.getElementById('btnZoomReset').addEventListener('click', () => {
+    zoomLevel = 1.0;
+    panOffX = 0;
+    panOffY = 0;
+    resizeCanvas();
   });
 
   // Start with initial log

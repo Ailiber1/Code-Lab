@@ -1,0 +1,12 @@
+{
+  "name": "code-lab",
+  "version": "2.0.0",
+  "description": "Code-Lab: AI開発司令室 — Claude Code CLI連動",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
