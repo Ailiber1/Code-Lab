@@ -56,11 +56,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
   transition:transform 0.1s,box-shadow 0.1s,filter 0.1s;flex-shrink:0}
 #btnAttach:hover{filter:brightness(1.2);box-shadow:0 0 8px var(--accent)}
 #btnAttach:active{transform:scale(0.85);filter:brightness(0.9)}
-#attachPreview{display:none;align-items:center;gap:6px;padding:3px 12px;
-  background:#ffffff08;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim);
-  max-height:28px;overflow-x:auto;overflow-y:hidden;white-space:nowrap}
+#attachPreview{display:none;align-items:center;gap:4px;font-size:12px;color:var(--text-dim);
+  max-width:40%;overflow-x:auto;overflow-y:hidden;white-space:nowrap}
 #attachPreview.show{display:flex}
-#attachPreview .file-list{display:flex;gap:6px;flex-wrap:nowrap;flex:1;overflow-x:auto}
+#attachPreview .file-list{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto}
 #attachPreview .file-tag{background:var(--accent);color:#1a1520;padding:2px 8px;
   border-radius:4px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;
   white-space:nowrap;flex-shrink:0}
@@ -202,10 +201,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
         <div class="stat-item"><span class="icon">&#x1F504;</span><span class="val" id="statPhase">1/6</span></div>
       </div>
       <div id="phaseOverlay"><div class="phase-num"></div><div class="phase-name"></div></div>
-      <div id="attachPreview"><div class="file-list" id="fileList"></div></div>
       <div id="commandBar">
         <div class="label">社長&#x25B8;</div>
         <button id="btnAttach" title="ファイル添付">＋</button>
+        <div id="attachPreview"><div class="file-list" id="fileList"></div></div>
         <input type="file" id="fileInput" multiple accept=".md,.txt,.js,.ts,.html,.css,.json,.py,.java,.c,.cpp,.h,.xml,.yaml,.yml,.csv,.sh,.png,.jpg,.jpeg,.gif,.webp,.svg" style="display:none">
         <input type="text" id="cmdInput" placeholder="開発指示を入力してください...">
         <button id="cmdSend">&#x25B6;</button>
