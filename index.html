@@ -506,18 +506,23 @@ function drawShadow(x, y, rx, ry) {
 // SECTION: OFFICE DRAWING
 // ============================================================
 function drawFloor() {
-  for (let gy = 0; gy < GRID_H; gy++) {
-    for (let gx = 0; gx < GRID_W; gx++) {
+  // 外部地面: キャンバス全体を埋めるために大幅に拡張
+  const EXT = 12;
+  for (let gy = -EXT; gy < GRID_H + EXT; gy++) {
+    for (let gx = -EXT; gx < GRID_W + EXT; gx++) {
       const p = toIso(gx + 0.5, gy + 0.5, 0);
-      const col = (gx + gy) % 2 === 0 ? PALETTE.floor : PALETTE.floorAlt;
-      drawDiamond(p.sx, p.sy, col);
-    }
-  }
-  // Carpet area (center corridor area)
-  for (let gy = 1; gy < 8; gy++) {
-    for (let gx = 1; gx < 11; gx++) {
-      if ((gx === 3 || gx === 5 || gx === 7) && gy >= 2 && gy <= 7) {
-        // skip - these are already drawn
+      // 画面外ならスキップ（パフォーマンス最適化）
+      if (p.sx < -TILE_W * 2 || p.sx > canvas.width + TILE_W * 2 ||
+          p.sy < -TILE_H * 2 || p.sy > canvas.height + TILE_H * 2) continue;
+
+      const isInside = gx >= 0 && gx < GRID_W && gy >= 0 && gy < GRID_H;
+      if (isInside) {
+        const col = (gx + gy) % 2 === 0 ? PALETTE.floor : PALETTE.floorAlt;
+        drawDiamond(p.sx, p.sy, col);
+      } else {
+        // 外部地面 — 暗めのタイルで隙間を埋める
+        const col = (gx + gy) % 2 === 0 ? '#2e2838' : '#2a2434';
+        drawDiamond(p.sx, p.sy, col);
       }
     }
   }
@@ -1201,11 +1206,8 @@ function draw() {
   try {
     c.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Background gradient
-    const bgGrad = c.createLinearGradient(0, 0, 0, canvas.height);
-    bgGrad.addColorStop(0, '#2a2236');
-    bgGrad.addColorStop(1, '#1a1520');
-    c.fillStyle = bgGrad;
+    // Background — 外部タイルと調和する色
+    c.fillStyle = '#2c2636';
     c.fillRect(0, 0, canvas.width, canvas.height);
 
     // Floor
