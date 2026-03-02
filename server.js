@@ -683,10 +683,39 @@ function processStreamJson(ws, session, parsed) {
   }
 }
 
+// ============================================================
+// SECTION: Auto Backup (第2層: ファイル上書き防止)
+// ============================================================
+function backupIfExists(ws, session, filePath) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return;
+    const backupDir = path.join(session.projectDir, '.claude-backup');
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+    const basename = path.basename(filePath);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const backupPath = path.join(backupDir, basename + '.' + timestamp);
+    fs.copyFileSync(filePath, backupPath);
+    console.log('[BACKUP] 作成:', filePath, '->', backupPath);
+    // ブラウザに通知
+    ws.send(JSON.stringify({
+      type: 'file_backup',
+      original: filePath,
+      backup: backupPath
+    }));
+  } catch (e) {
+    console.error('[BACKUP] エラー:', e.message);
+  }
+}
+
 function handleToolUse(ws, session, block) {
   const toolName = block.name || 'unknown';
   const input = block.input || {};
   const inputStr = JSON.stringify(input).slice(0, 200);
+
+  // 第2層: Write/Edit ツールで既存ファイルがある場合は自動バックアップ
+  if (['write', 'edit'].includes(toolName.toLowerCase()) && input.file_path) {
+    backupIfExists(ws, session, input.file_path);
+  }
 
   // ツール履歴に追加
   const historyEntry = {
