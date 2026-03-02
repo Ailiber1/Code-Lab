@@ -221,9 +221,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
         <button id="btnManual">&#x1F3AF; 手動</button>
         <button id="btnLive">&#x1F4E1; Live</button>
         <button id="btnSpeed" data-speed="1">1&#xD7;</button>
-        <button id="btnZoomIn" title="ズームイン">&#x1F50D;+</button>
-        <button id="btnZoomOut" title="ズームアウト">&#x1F50D;-</button>
-        <button id="btnZoomReset" title="リセット">&#x21BA;</button>
       </div>
       <!-- Live状態表示（シンプル） -->
       <div id="livePanel">
@@ -243,10 +240,6 @@ let OFFSET_X = 400, OFFSET_Y = 140;
 // タイルサイズの基準値（resizeCanvasで動的計算）
 const BASE_TILE_W = 64, BASE_TILE_H = 32, BASE_Z = 30;
 // ズーム＆パン
-let zoomLevel = 1.0;
-const ZOOM_MIN = 0.5, ZOOM_MAX = 3.0, ZOOM_STEP = 0.1;
-let panOffX = 0, panOffY = 0;
-let isDragging = false, dragStartX = 0, dragStartY = 0, panStartX = 0, panStartY = 0;
 
 const PALETTE = {
   floor:'#e8dcc8', floorAlt:'#ddd0bc',
@@ -402,14 +395,14 @@ function resizeCanvas() {
   const wallH = canvas.height * WALL_RATIO;
   const floorH = canvas.height - wallH;
 
-  // セルサイズ: キャンバスを隙間なく埋める（ズーム適用）
-  TILE_W = Math.round(canvas.width / GRID_W * zoomLevel);
-  TILE_H = Math.round(floorH / GRID_H * zoomLevel);
-  Z_SCALE = Math.round(wallH / 3.2 * zoomLevel);
+  // セルサイズ: キャンバスを隙間なく埋める
+  TILE_W = Math.round(canvas.width / GRID_W);
+  TILE_H = Math.round(floorH / GRID_H);
+  Z_SCALE = Math.round(wallH / 3.2);
 
   // オフセット: 床の左上を壁の真下に配置
-  OFFSET_X = Math.round((canvas.width - GRID_W * TILE_W) / 2) + panOffX;
-  OFFSET_Y = Math.round(wallH + (floorH - GRID_H * TILE_H) / 2) + panOffY;
+  OFFSET_X = Math.round((canvas.width - GRID_W * TILE_W) / 2);
+  OFFSET_Y = Math.round(wallH + (floorH - GRID_H * TILE_H) / 2);
 }
 
 // 矩形トップダウン座標変換（旧アイソメトリック → 矩形）
@@ -1808,103 +1801,6 @@ function init() {
   // Event listeners
   window.addEventListener('resize', resizeCanvas);
 
-  // ズーム（マウスホイール）
-  canvas.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-    const oldZoom = zoomLevel;
-    zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomLevel + delta));
-    if (zoomLevel !== oldZoom) {
-      // ズーム中心をマウス位置にする
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const zoomRatio = zoomLevel / oldZoom;
-      panOffX = mx - zoomRatio * (mx - panOffX);
-      panOffY = my - zoomRatio * (my - panOffY);
-      resizeCanvas();
-    }
-  }, {passive: false});
-
-  // パン（マウスドラッグ）
-  canvas.addEventListener('mousedown', (e) => {
-    if (e.button === 0) {
-      isDragging = true;
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-      panStartX = panOffX;
-      panStartY = panOffY;
-      canvas.style.cursor = 'grabbing';
-    }
-  });
-  window.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    panOffX = panStartX + (e.clientX - dragStartX);
-    panOffY = panStartY + (e.clientY - dragStartY);
-    resizeCanvas();
-  });
-  window.addEventListener('mouseup', () => {
-    if (isDragging) {
-      isDragging = false;
-      canvas.style.cursor = 'grab';
-    }
-  });
-  canvas.style.cursor = 'grab';
-
-  // タッチ操作（ピンチズーム＆パン）
-  let lastTouchDist = 0, lastTouchMid = null;
-  canvas.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      lastTouchDist = Math.hypot(dx, dy);
-      lastTouchMid = {
-        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
-        y: (e.touches[0].clientY + e.touches[1].clientY) / 2
-      };
-    } else if (e.touches.length === 1) {
-      isDragging = true;
-      dragStartX = e.touches[0].clientX;
-      dragStartY = e.touches[0].clientY;
-      panStartX = panOffX;
-      panStartY = panOffY;
-    }
-  }, {passive: false});
-  canvas.addEventListener('touchmove', (e) => {
-    if (e.touches.length === 2 && lastTouchDist > 0) {
-      e.preventDefault();
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.hypot(dx, dy);
-      const scale = dist / lastTouchDist;
-      const oldZoom = zoomLevel;
-      zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomLevel * scale));
-      lastTouchDist = dist;
-      const mid = {
-        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
-        y: (e.touches[0].clientY + e.touches[1].clientY) / 2
-      };
-      const rect = canvas.getBoundingClientRect();
-      const mx = mid.x - rect.left;
-      const my = mid.y - rect.top;
-      const zoomRatio = zoomLevel / oldZoom;
-      panOffX = mx - zoomRatio * (mx - panOffX);
-      panOffY = my - zoomRatio * (my - panOffY);
-      lastTouchMid = mid;
-      resizeCanvas();
-    } else if (e.touches.length === 1 && isDragging) {
-      panOffX = panStartX + (e.touches[0].clientX - dragStartX);
-      panOffY = panStartY + (e.touches[0].clientY - dragStartY);
-      resizeCanvas();
-    }
-  }, {passive: false});
-  canvas.addEventListener('touchend', () => {
-    isDragging = false;
-    lastTouchDist = 0;
-    lastTouchMid = null;
-  });
-
   // Command bar
   const cmdInput = document.getElementById('cmdInput');
   const cmdSend = document.getElementById('cmdSend');
@@ -1994,22 +1890,6 @@ function init() {
       CONNECTION_MODE = 'simulation';
     }
   };
-
-  // ズームボタン
-  document.getElementById('btnZoomIn').addEventListener('click', () => {
-    zoomLevel = Math.min(ZOOM_MAX, zoomLevel + ZOOM_STEP * 2);
-    resizeCanvas();
-  });
-  document.getElementById('btnZoomOut').addEventListener('click', () => {
-    zoomLevel = Math.max(ZOOM_MIN, zoomLevel - ZOOM_STEP * 2);
-    resizeCanvas();
-  });
-  document.getElementById('btnZoomReset').addEventListener('click', () => {
-    zoomLevel = 1.0;
-    panOffX = 0;
-    panOffY = 0;
-    resizeCanvas();
-  });
 
   // Start with initial log
   addLog('boss', '🧪 Code-Lab 司令室を起動しました');
