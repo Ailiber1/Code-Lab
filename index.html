@@ -1777,19 +1777,31 @@ function simulateResponse(text) {
 
   // 自動デモが走っていたら停止
   stopDemo();
+  state._pausedForConfirm = false;
 
   // 既存のシミュレーションをクリア
   if (simTimer) { clearTimeout(simTimer); simTimer = null; }
+  simQueue = [];
+
+  // 全エージェントをリセット＆アクティブに
+  AGENT_DEFS.forEach(a => {
+    const ag = state.agents[a.id];
+    ag.active = true;
+    ag.working = false;
+    ag.action = '';
+    ag.thought = '';
+  });
+
+  // 確認キューもクリア
+  state.confirmQueue = [];
 
   // シナリオ生成
   simQueue = buildScenario(text);
 
-  // 全エージェントをアクティブに
-  AGENT_DEFS.forEach(a => { state.agents[a.id].active = true; });
   updateUI();
 
-  // 連鎖実行開始
-  executeSimStep();
+  // 少し間を置いてから連鎖実行開始（リセットが画面に反映されてから）
+  setTimeout(() => executeSimStep(), 300);
 }
 
 function executeSimStep() {
