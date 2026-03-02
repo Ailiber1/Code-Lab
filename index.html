@@ -349,10 +349,14 @@ let lastFrame = 0;
 
 function resizeCanvas() {
   const area = document.getElementById('canvasArea');
+  const cmdBar = document.getElementById('commandBar');
+  const cmdH = cmdBar ? cmdBar.offsetHeight : 44;
   canvas.width = area.clientWidth;
-  canvas.height = area.clientHeight - 44; // minus command bar
-  OFFSET_X = canvas.width * 0.42;
-  OFFSET_Y = 110;
+  canvas.height = Math.max(300, area.clientHeight - cmdH);
+  // Center the isometric grid in the canvas
+  // Grid spans roughly 640px wide, 400px tall
+  OFFSET_X = canvas.width * 0.44;
+  OFFSET_Y = Math.max(80, canvas.height * 0.18);
 }
 
 function toIso(x, y, z) {
