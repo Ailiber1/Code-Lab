@@ -50,15 +50,20 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 #commandBar button{background:var(--accent);color:#1a1520;border:none;
   border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:14px}
 #commandBar button:hover{filter:brightness(1.15)}
-#btnAttach{background:transparent;color:var(--accent);border:1px solid var(--border);
-  font-size:18px;padding:6px 10px;border-radius:8px;cursor:pointer;line-height:1}
-#btnAttach:hover{background:#ffffff10;border-color:var(--accent)}
-#attachPreview{display:none;align-items:center;gap:6px;padding:4px 12px;
-  background:#ffffff08;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim)}
+#btnAttach{background:var(--accent);color:#1a1520;border:none;
+  font-size:20px;font-weight:900;width:36px;height:36px;border-radius:50%;
+  cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;
+  transition:transform 0.1s,box-shadow 0.1s,filter 0.1s;flex-shrink:0}
+#btnAttach:hover{filter:brightness(1.2);box-shadow:0 0 8px var(--accent)}
+#btnAttach:active{transform:scale(0.85);filter:brightness(0.9)}
+#attachPreview{display:none;align-items:center;gap:6px;padding:3px 12px;
+  background:#ffffff08;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim);
+  max-height:28px;overflow-x:auto;overflow-y:hidden;white-space:nowrap}
 #attachPreview.show{display:flex}
-#attachPreview .file-list{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+#attachPreview .file-list{display:flex;gap:6px;flex-wrap:nowrap;flex:1;overflow-x:auto}
 #attachPreview .file-tag{background:var(--accent);color:#1a1520;padding:2px 8px;
-  border-radius:4px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px}
+  border-radius:4px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;
+  white-space:nowrap;flex-shrink:0}
 #attachPreview .file-tag .remove{cursor:pointer;opacity:0.7;font-size:13px}
 #attachPreview .file-tag .remove:hover{opacity:1}
 
