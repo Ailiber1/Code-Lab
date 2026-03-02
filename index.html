@@ -139,6 +139,15 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 #controls button:hover{background:#ffffff10}
 #controls button.active{background:var(--accent);color:#1a1520;border-color:var(--accent)}
 
+/* ===== STATUS OVERLAY ===== */
+#statusOverlay{position:absolute;top:0;left:0;right:0;bottom:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(26,21,32,.85);z-index:20;pointer-events:none;
+  opacity:0;transition:opacity .3s}
+#statusOverlay.visible{opacity:1}
+#statusOverlay .overlay-title{font-size:48px;font-weight:700;color:var(--accent);
+  font-family:'JetBrains Mono',monospace}
+#statusOverlay .overlay-sub{font-size:20px;font-weight:600;margin-top:8px}
 
 /* ===== LIVE CONTROL PANEL ===== */
 #livePanel{display:none;padding:8px 12px;background:#0d0a12;border-top:1px solid var(--border)}
@@ -187,6 +196,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
         <div class="stat-item"><span class="icon">&#x1F9EA;</span><span class="val" id="statTests">0</span></div>
         <div class="stat-item"><span class="icon">&#x1F41B;</span><span class="val" id="statBugs">0</span></div>
       </div>
+      <div id="statusOverlay"><div class="overlay-title"></div><div class="overlay-sub"></div></div>
       <div id="commandBar">
         <div class="label">社長&#x25B8;</div>
         <button id="btnAttach" title="ファイル添付">＋</button>
@@ -1167,6 +1177,14 @@ function drawFloatingEmojis() {
 }
 
 
+function showStatusOverlay(title, sub, duration) {
+  const overlay = document.getElementById('statusOverlay');
+  overlay.querySelector('.overlay-title').textContent = title;
+  overlay.querySelector('.overlay-sub').textContent = sub;
+  overlay.classList.add('visible');
+  setTimeout(() => overlay.classList.remove('visible'), duration || 2500);
+}
+
 function spawnCelebration() {
   // Confetti for all agents
   const allIds = AGENT_DEFS.map(a => a.id);
@@ -1718,6 +1736,9 @@ let simTimer = null;
 function simulateResponse(text) {
   addLog('boss', '📢 ' + text);
 
+  // 開発開始オーバーレイ
+  showStatusOverlay('開発開始', '「' + text.slice(0,25) + (text.length>25?'…':'') + '」', 2500);
+
   // 自動デモが走っていたら停止
   stopDemo();
   state._pausedForConfirm = false;
@@ -1748,7 +1769,13 @@ function simulateResponse(text) {
 }
 
 function executeSimStep() {
-  if (simQueue.length === 0) { simTimer = null; return; }
+  if (simQueue.length === 0) {
+    simTimer = null;
+    // 全工程完了オーバーレイ
+    showStatusOverlay('🎊 完了', '開発が完了しました', 3000);
+    spawnCelebration();
+    return;
+  }
 
   const step = simQueue.shift();
   const ag = state.agents[step.a];
