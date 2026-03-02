@@ -974,36 +974,27 @@ function drawCharacter(agentDef, gx, gy, isActive, isBoss) {
   c.beginPath(); c.arc(sx - 15*sc, sy - 13*sc + armWave, 3*sc, 0, Math.PI*2); c.fill();
   c.beginPath(); c.arc(sx + 15*sc, sy - 13*sc - armWave, 3*sc, 0, Math.PI*2); c.fill();
 
-  // Neck
+  // Neck (後ろから少し見える)
   c.fillStyle = '#f0d0b0';
   c.fillRect(sx - 2.5*sc, sy - 22*sc, 5*sc, 4*sc);
 
-  // Head
-  c.fillStyle = '#f0d0b0';
+  // Head — 後頭部（PC画面に向かっているので背中側）
+  const hairColor = isBoss ? '#1a1a2e' : '#3d2817';
+  // 後頭部ベース（髪で覆われた丸い頭）
+  c.fillStyle = hairColor;
   c.beginPath(); c.arc(sx, sy - 27*sc, 8*sc, 0, Math.PI*2); c.fill();
-
-  // Hair
-  c.fillStyle = isBoss ? '#1a1a2e' : '#3d2817';
-  c.beginPath(); c.arc(sx, sy - 28*sc, 8*sc, -Math.PI, 0); c.fill();
-  c.fillRect(sx - 8*sc, sy - 30*sc, 2.5*sc, 7*sc);
-  c.fillRect(sx + 5.5*sc, sy - 30*sc, 2.5*sc, 7*sc);
-
-  // Eyes
-  c.fillStyle = '#333';
-  c.beginPath(); c.arc(sx - 3*sc, sy - 27*sc, 1.2*sc, 0, Math.PI*2); c.fill();
-  c.beginPath(); c.arc(sx + 3*sc, sy - 27*sc, 1.2*sc, 0, Math.PI*2); c.fill();
+  // 耳（左右に肌色で小さく）
+  c.fillStyle = '#f0d0b0';
+  c.beginPath(); c.arc(sx - 8*sc, sy - 26*sc, 2*sc, 0, Math.PI*2); c.fill();
+  c.beginPath(); c.arc(sx + 8*sc, sy - 26*sc, 2*sc, 0, Math.PI*2); c.fill();
+  // 髪の毛ディテール（後頭部のふくらみ）
+  c.fillStyle = isBoss ? '#12122a' : '#2e1c0f';
+  c.beginPath(); c.arc(sx, sy - 28.5*sc, 6.5*sc, -Math.PI*0.8, Math.PI*0.8); c.fill();
 
   if (isBoss) {
-    // ネクタイ
-    c.fillStyle = '#c8973e';
-    c.fillRect(sx - 2*S, sy - 20*sc, 4*S, 8*S);
-    // ネクタイ先端
-    c.beginPath();
-    c.moveTo(sx - 2.5*S, sy - 12*sc);
-    c.lineTo(sx, sy - 8*sc);
-    c.lineTo(sx + 2.5*S, sy - 12*sc);
-    c.closePath();
-    c.fill();
+    // 社長：襟（後ろから見える白い襟元）
+    c.fillStyle = '#e8e0d0';
+    c.fillRect(sx - 5*sc, sy - 20.5*sc, 10*sc, 2.5*sc);
   }
 
   c.globalAlpha = 1;
