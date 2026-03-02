@@ -1,0 +1,1727 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Code-Lab ★ 司令室</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#1a1520;--panel:#1e1628;--accent:#c8973e;--text:#e8dcc8;
+  --border:#c8973e40;--card-active:#ffffff12;--card-inactive:#ffffff08;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:'Inter','Noto Sans JP',sans-serif}
+#app{display:grid;grid-template-rows:48px 1fr;height:100%}
+
+/* ===== HEADER ===== */
+#header{display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;background:var(--panel);border-bottom:1px solid var(--border);z-index:10}
+#header .logo{font-size:16px;font-weight:700;white-space:nowrap}
+#header .logo span{color:var(--accent)}
+#header .phase-display{font-size:13px;font-weight:600;color:var(--accent);
+  background:#c8973e18;padding:4px 14px;border-radius:20px;border:1px solid var(--border)}
+#header .right{display:flex;align-items:center;gap:12px}
+.status-pill{display:flex;align-items:center;gap:6px;font-size:12px;
+  padding:4px 10px;border-radius:12px;background:#ffffff10}
+.status-dot{width:7px;height:7px;border-radius:50%;background:#5cc878;
+  animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+#clock{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent)}
+
+/* ===== MAIN ===== */
+#main{display:grid;grid-template-columns:1fr 340px;overflow:hidden}
+#canvasArea{position:relative;display:flex;flex-direction:column;min-width:0}
+#canvas{flex:1;display:block;background:#2a2030}
+#statsBar{position:absolute;top:8px;left:8px;display:flex;gap:8px;z-index:5}
+.stat-item{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:600;
+  padding:3px 10px;border-radius:10px;background:#00000080;backdrop-filter:blur(4px)}
+.stat-item .icon{font-size:14px}
+.stat-item .val{font-family:'JetBrains Mono',monospace}
+#commandBar{display:flex;align-items:center;gap:8px;padding:8px 12px;
+  background:var(--panel);border-top:1px solid var(--border)}
+#commandBar .label{font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap}
+#commandBar input{flex:1;background:#ffffff08;border:1px solid var(--border);
+  border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;
+  font-family:'Noto Sans JP',sans-serif;outline:none}
+#commandBar input:focus{border-color:var(--accent)}
+#commandBar input::placeholder{color:#ffffff40}
+#commandBar button{background:var(--accent);color:#1a1520;border:none;
+  border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:14px}
+#commandBar button:hover{filter:brightness(1.15)}
+
+/* ===== SIDE PANEL ===== */
+#sidePanel{display:flex;flex-direction:column;background:var(--panel);
+  border-left:1px solid var(--border);overflow-y:auto;overflow-x:hidden}
+#sidePanel::-webkit-scrollbar{width:4px}
+#sidePanel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.panel-section{padding:10px 12px;border-bottom:1px solid var(--border)}
+.section-title{font-size:11px;font-weight:700;color:#ffffff50;text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:8px}
+
+/* Boss Card */
+.boss-card{display:flex;align-items:center;gap:10px;padding:10px;
+  background:linear-gradient(135deg,#c8973e18,#c8973e08);border:1px solid var(--border);
+  border-radius:10px}
+.boss-avatar{width:40px;height:40px;border-radius:50%;background:#c8973e20;
+  display:flex;align-items:center;justify-content:center;font-size:22px;
+  border:2px solid var(--accent)}
+.boss-info .name{font-size:14px;font-weight:700}
+.boss-info .role{font-size:11px;color:#ffffff60}
+
+/* Agent Card */
+.agent-card{display:flex;align-items:flex-start;gap:8px;padding:8px;
+  border-radius:8px;margin-bottom:4px;transition:all .3s}
+.agent-card.active{background:var(--card-active)}
+.agent-card.inactive{background:var(--card-inactive);opacity:.5}
+.agent-avatar{width:32px;height:32px;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;font-size:16px;flex-shrink:0;
+  border:2px solid transparent}
+.agent-card.active .agent-avatar{border-color:var(--agent-color)}
+.agent-info{flex:1;min-width:0}
+.agent-info .name{font-size:13px;font-weight:600;display:flex;align-items:center;gap:4px}
+.agent-info .role{font-size:11px;color:#ffffff50}
+.agent-info .action{font-size:11px;color:#ffffff70;margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-info .thought{font-size:11px;color:#ffffff60;font-style:italic;margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.status-indicator{width:6px;height:6px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.status-indicator.working{background:#5cc878}
+.status-indicator.waiting{background:#c8973e}
+.status-indicator.idle{background:#666}
+
+/* Confirm Section */
+#confirmSection{display:none}
+#confirmSection.visible{display:block}
+.confirm-badge{display:inline-flex;align-items:center;gap:4px;
+  background:#e0687820;color:#e06878;padding:2px 8px;border-radius:10px;
+  font-size:11px;font-weight:700;animation:confirmPulse 1.5s infinite}
+@keyframes confirmPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+.confirm-card{background:#ffffff08;border:1px solid #e0687840;border-radius:8px;
+  padding:10px;margin-top:6px}
+.confirm-card .from{font-size:12px;font-weight:600;margin-bottom:4px}
+.confirm-card .msg{font-size:12px;color:#ffffff80;margin-bottom:8px}
+.confirm-btns{display:flex;gap:6px}
+.confirm-btns button{flex:1;padding:5px;border:none;border-radius:6px;
+  font-size:12px;font-weight:600;cursor:pointer}
+.btn-approve{background:#5cc87830;color:#5cc878}
+.btn-reject{background:#e0687830;color:#e06878}
+.btn-reply{background:#38b2c930;color:#38b2c9}
+
+/* Log Panel */
+#logPanel{flex:1;min-height:120px;max-height:200px;overflow-y:auto;
+  background:#0a0810;border-radius:6px;padding:8px;margin:0 12px 6px;
+  font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.6}
+#logPanel::-webkit-scrollbar{width:3px}
+#logPanel::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+.log-line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log-time{color:#ffffff30}
+.log-tag{font-weight:700;padding:1px 4px;border-radius:3px;font-size:10px}
+
+/* Controls */
+#controls{display:flex;align-items:center;gap:6px;padding:8px 12px}
+#controls button{padding:5px 12px;border:1px solid var(--border);border-radius:6px;
+  background:transparent;color:var(--text);font-size:12px;cursor:pointer;font-weight:600}
+#controls button:hover{background:#ffffff10}
+#controls button.active{background:var(--accent);color:#1a1520;border-color:var(--accent)}
+
+/* ===== PHASE OVERLAY ===== */
+#phaseOverlay{position:absolute;top:0;left:0;right:0;bottom:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(26,21,32,.85);z-index:20;pointer-events:none;
+  opacity:0;transition:opacity .3s}
+#phaseOverlay.visible{opacity:1}
+#phaseOverlay .phase-num{font-size:60px;font-weight:700;color:var(--accent);
+  font-family:'JetBrains Mono',monospace}
+#phaseOverlay .phase-name{font-size:22px;font-weight:700;margin-top:8px}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:800px){
+  #main{grid-template-columns:1fr}
+  #sidePanel{display:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ===== HEADER ===== -->
+  <header id="header">
+    <div class="logo">&#x1F9EA; <span>Code-Lab</span> &#x2605; 司令室</div>
+    <div class="phase-display" id="phaseText">Phase 1: 設計</div>
+    <div class="right">
+      <div class="status-pill"><div class="status-dot" id="statusDot"></div><span id="statusLabel">指示待ち</span></div>
+      <div id="clock">00:00:00</div>
+    </div>
+  </header>
+  <!-- ===== MAIN ===== -->
+  <main id="main">
+    <div id="canvasArea">
+      <canvas id="canvas"></canvas>
+      <div id="statsBar">
+        <div class="stat-item"><span class="icon">&#x1F4C4;</span><span class="val" id="statFiles">0</span></div>
+        <div class="stat-item"><span class="icon">&#x270F;&#xFE0F;</span><span class="val" id="statLines">0</span></div>
+        <div class="stat-item"><span class="icon">&#x1F9EA;</span><span class="val" id="statTests">0</span></div>
+        <div class="stat-item"><span class="icon">&#x1F41B;</span><span class="val" id="statBugs">0</span></div>
+        <div class="stat-item"><span class="icon">&#x1F504;</span><span class="val" id="statPhase">1/6</span></div>
+      </div>
+      <div id="phaseOverlay"><div class="phase-num"></div><div class="phase-name"></div></div>
+      <div id="commandBar">
+        <div class="label">社長&#x25B8;</div>
+        <input type="text" id="cmdInput" placeholder="開発指示を入力してください...">
+        <button id="cmdSend">&#x25B6;</button>
+      </div>
+    </div>
+    <div id="sidePanel">
+      <!-- Boss Card -->
+      <div class="panel-section">
+        <div class="boss-card">
+          <div class="boss-avatar">&#x1F451;</div>
+          <div class="boss-info"><div class="name">社長 &#x2014; あなた</div><div class="role">最高責任者</div></div>
+        </div>
+      </div>
+      <!-- Agent List -->
+      <div class="panel-section" id="agentListSection">
+        <div class="section-title">AI従業員</div>
+        <div id="agentList"></div>
+      </div>
+      <!-- Confirm Section -->
+      <div class="panel-section" id="confirmSection">
+        <div class="section-title">&#x1F4E9; 確認依頼 <span class="confirm-badge" id="confirmBadge">0件</span></div>
+        <div id="confirmList"></div>
+      </div>
+      <!-- Log Panel -->
+      <div class="panel-section" style="flex:1;display:flex;flex-direction:column;padding-bottom:0">
+        <div class="section-title">作業ログ</div>
+        <div id="logPanel"></div>
+      </div>
+      <!-- Controls -->
+      <div id="controls">
+        <button id="btnDemo" class="active">&#x25B6; デモ</button>
+        <button id="btnManual">&#x1F3AF; 手動</button>
+        <button id="btnSpeed" data-speed="1">1&#xD7;</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ============================================================
+// SECTION: CONSTANTS
+// ============================================================
+const TILE_W = 64, TILE_H = 32, Z_SCALE = 30;
+const GRID_W = 12, GRID_H = 10;
+let OFFSET_X = 400, OFFSET_Y = 140;
+
+const PALETTE = {
+  floor:'#e8dcc8', floorAlt:'#ddd0bc',
+  wallBack:'#f5f0e8', wallSide:'#ebe4d8', wallAccent:'#c8b8a0',
+  carpet:'#6b8fa3',
+  deskTop:'#d4c4a8', deskLeg:'#b8a888',deskFront:'#c4b498',
+  chairSeat:'#4a5568', chairBack:'#2d3748',
+  sky:'#87ceeb', glass:'#d4eaf7',
+  monitor:'#1a1a2e', monitorFrame:'#333',
+  uiBg:'#1a1520', uiPanel:'#1e1628', uiAccent:'#c8973e', uiText:'#e8dcc8'
+};
+
+const AGENT_DEFS = [
+  {id:'lead',      name:'リード',       role:'全体設計・進行管理', color:'#e6a532', shirt:'#2c3e6b', emoji:'📋'},
+  {id:'developer', name:'デベロッパー', role:'コード実装・ビルド', color:'#5cc878', shirt:'#3b7dd8', emoji:'⌨️'},
+  {id:'tester',    name:'テスター',     role:'検証・動作確認',     color:'#38b2c9', shirt:'#7b5ea7', emoji:'🧪'},
+  {id:'debugger',  name:'デバッガー',   role:'エラー調査・修正',   color:'#e06878', shirt:'#c0392b', emoji:'🔍'},
+  {id:'reviewer',  name:'レビュアー',   role:'コード品質・設計レビュー', color:'#9b8ec4', shirt:'#c8a832', emoji:'👀'},
+  {id:'ui-designer',name:'UIデザイナー',role:'UI/UX・スタイリング',color:'#e88ec4', shirt:'#d4729a', emoji:'🎨'},
+  {id:'qa',        name:'QA',           role:'最終品質保証',       color:'#7ec88e', shirt:'#27ae60', emoji:'✅'}
+];
+
+const PHASE_ACTIVE = {
+  1:['lead'],
+  2:['lead','developer','ui-designer'],
+  3:['tester','reviewer'],
+  4:['debugger','developer'],
+  5:['tester','qa'],
+  6:['lead','developer']
+};
+const PHASE_NAMES = {1:'設計',2:'実装',3:'レビュー',4:'バグ修正',5:'最終QA',6:'デプロイ'};
+
+// Agent grid positions (x, y) in office grid
+const AGENT_POS = {
+  'lead':       {gx:2,  gy:2.5},
+  'developer':  {gx:4.2,gy:2.5},
+  'ui-designer':{gx:6.8,gy:2.5},
+  'reviewer':   {gx:9,  gy:2.5},
+  'tester':     {gx:2,  gy:5.5},
+  'debugger':   {gx:4.2,gy:5.5},
+  'qa':         {gx:6.8,gy:5.5}
+};
+const BOSS_POS = {gx:8, gy:8.5};
+
+// ============================================================
+// SECTION: STATE
+// ============================================================
+const state = {
+  mode:'demo', // 'demo' or 'manual'
+  speed:1,
+  phase:1,
+  running:false,
+  stats:{files:0,lines:0,tests:0,bugs:0},
+  agents:{},
+  confirmQueue:[],
+  confirmIdCounter:0,
+  logs:[],
+  eventIndex:0,
+  eventTimer:null,
+  phaseOverlayVisible:false,
+  time:0 // elapsed ms
+};
+
+// Init agent states
+AGENT_DEFS.forEach(a => {
+  state.agents[a.id] = {
+    active:false, working:false, action:'', thought:'', animPhase:0
+  };
+});
+
+// Effects arrays
+const particles = [];
+const floatingEmojis = [];
+
+// ============================================================
+// SECTION: CONNECTION INTERFACE (Phase 2 ready)
+// ============================================================
+const CONNECTION_MODE = 'simulation'; // 'simulation' or 'websocket'
+let ws = null;
+
+function sendCommand(text) {
+  if (CONNECTION_MODE === 'websocket' && ws) {
+    ws.send(JSON.stringify({type:'command', text}));
+  } else {
+    simulateResponse(text);
+  }
+}
+
+// DevEvent interface (Phase 2 compatible)
+function processDevEvent(ev) {
+  // Update phase
+  if (ev.phase && ev.phase !== state.phase) {
+    showPhaseOverlay(ev.phase);
+    state.phase = ev.phase;
+    updateActiveAgents();
+  }
+  // Update agent
+  if (ev.a || ev.agent) {
+    const aid = ev.a || ev.agent;
+    const ag = state.agents[aid];
+    if (ag) {
+      ag.working = true;
+      ag.action = ev.t || ev.action || '';
+      ag.thought = ev.th || ev.thought || '';
+    }
+  }
+  // Update stats
+  const statKey = ev.s || ev.stat;
+  const statN = ev.n || ev.statDelta || 0;
+  if (statKey && state.stats[statKey] !== undefined) {
+    state.stats[statKey] = Math.max(0, state.stats[statKey] + statN);
+  }
+  // Log
+  const aid2 = ev.a || ev.agent || 'system';
+  addLog(aid2, ev.t || ev.action || '');
+  // Emoji
+  if (ev.e || ev.emoji) {
+    const eid = ev.a || ev.agent || 'lead';
+    spawnFloatingEmoji(eid, ev.e || ev.emoji);
+  }
+  // Particles
+  if (ev.a || ev.agent) spawnParticles(ev.a || ev.agent);
+  // Confirm
+  if (ev.confirm) addConfirm(ev.a || ev.agent || 'lead', ev.confirm.msg);
+  // Update UI
+  updateUI();
+}
+
+// ============================================================
+// SECTION: CANVAS & ISO UTILS
+// ============================================================
+const canvas = document.getElementById('canvas');
+const c = canvas.getContext('2d');
+let lastFrame = 0;
+
+function resizeCanvas() {
+  const area = document.getElementById('canvasArea');
+  canvas.width = area.clientWidth;
+  canvas.height = area.clientHeight - 44; // minus command bar
+  OFFSET_X = canvas.width * 0.42;
+  OFFSET_Y = 110;
+}
+
+function toIso(x, y, z) {
+  return {
+    sx: (x - y) * TILE_W / 2 + OFFSET_X,
+    sy: (x + y) * TILE_H / 2 - (z || 0) * Z_SCALE + OFFSET_Y
+  };
+}
+
+function rrect(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.lineTo(x + w - r, y);
+  c.quadraticCurveTo(x + w, y, x + w, y + r);
+  c.lineTo(x + w, y + h - r);
+  c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  c.lineTo(x + r, y + h);
+  c.quadraticCurveTo(x, y + h, x, y + h - r);
+  c.lineTo(x, y + r);
+  c.quadraticCurveTo(x, y, x + r, y);
+  c.closePath();
+}
+
+function darken(hex, amt) {
+  let r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  r = Math.max(0, Math.floor(r * amt));
+  g = Math.max(0, Math.floor(g * amt));
+  b = Math.max(0, Math.floor(b * amt));
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
+// ============================================================
+// SECTION: ISOMETRIC DRAWING - PRIMITIVES
+// ============================================================
+function drawDiamond(cx, cy, color) {
+  c.beginPath();
+  c.moveTo(cx, cy - TILE_H / 2);
+  c.lineTo(cx + TILE_W / 2, cy);
+  c.lineTo(cx, cy + TILE_H / 2);
+  c.lineTo(cx - TILE_W / 2, cy);
+  c.closePath();
+  c.fillStyle = color;
+  c.fill();
+}
+
+function drawIsoBox(x, y, z, w, d, h, topC, frontC, rightC) {
+  const p1 = toIso(x, y, z + h);
+  const p2 = toIso(x + w, y, z + h);
+  const p3 = toIso(x + w, y + d, z + h);
+  const p4 = toIso(x, y + d, z + h);
+  const p5 = toIso(x, y + d, z);
+  const p6 = toIso(x + w, y + d, z);
+  const p7 = toIso(x + w, y, z);
+  // Top
+  c.beginPath(); c.moveTo(p1.sx,p1.sy); c.lineTo(p2.sx,p2.sy);
+  c.lineTo(p3.sx,p3.sy); c.lineTo(p4.sx,p4.sy); c.closePath();
+  c.fillStyle = topC; c.fill();
+  // Front (y+d face)
+  c.beginPath(); c.moveTo(p4.sx,p4.sy); c.lineTo(p3.sx,p3.sy);
+  c.lineTo(p6.sx,p6.sy); c.lineTo(p5.sx,p5.sy); c.closePath();
+  c.fillStyle = frontC; c.fill();
+  // Right (x+w face)
+  c.beginPath(); c.moveTo(p3.sx,p3.sy); c.lineTo(p2.sx,p2.sy);
+  c.lineTo(p7.sx,p7.sy); c.lineTo(p6.sx,p6.sy); c.closePath();
+  c.fillStyle = rightC; c.fill();
+}
+
+function drawShadow(x, y, rx, ry) {
+  const p = toIso(x, y, 0);
+  c.fillStyle = 'rgba(0,0,0,0.12)';
+  c.beginPath();
+  c.ellipse(p.sx, p.sy + 2, rx, ry, 0, 0, Math.PI * 2);
+  c.fill();
+}
+
+// ============================================================
+// SECTION: OFFICE DRAWING
+// ============================================================
+function drawFloor() {
+  for (let gy = 0; gy < GRID_H; gy++) {
+    for (let gx = 0; gx < GRID_W; gx++) {
+      const p = toIso(gx + 0.5, gy + 0.5, 0);
+      const col = (gx + gy) % 2 === 0 ? PALETTE.floor : PALETTE.floorAlt;
+      drawDiamond(p.sx, p.sy, col);
+    }
+  }
+  // Carpet area (center corridor area)
+  for (let gy = 1; gy < 8; gy++) {
+    for (let gx = 1; gx < 11; gx++) {
+      if ((gx === 3 || gx === 5 || gx === 7) && gy >= 2 && gy <= 7) {
+        // skip - these are already drawn
+      }
+    }
+  }
+}
+
+function drawWalls() {
+  const WALL_H = 3.2;
+  // Back wall (y=0, from x=0 to x=12)
+  for (let gx = 0; gx < GRID_W; gx++) {
+    const bl = toIso(gx, 0, 0);
+    const br = toIso(gx + 1, 0, 0);
+    const tr = toIso(gx + 1, 0, WALL_H);
+    const tl = toIso(gx, 0, WALL_H);
+    c.beginPath();
+    c.moveTo(tl.sx, tl.sy); c.lineTo(tr.sx, tr.sy);
+    c.lineTo(br.sx, br.sy); c.lineTo(bl.sx, bl.sy);
+    c.closePath();
+    c.fillStyle = PALETTE.wallBack;
+    c.fill();
+    // Baseboard
+    const bbH = 0.2;
+    const bbl = toIso(gx, 0, 0);
+    const bbr = toIso(gx + 1, 0, 0);
+    const btr = toIso(gx + 1, 0, bbH);
+    const btl = toIso(gx, 0, bbH);
+    c.beginPath();
+    c.moveTo(btl.sx, btl.sy); c.lineTo(btr.sx, btr.sy);
+    c.lineTo(bbr.sx, bbr.sy); c.lineTo(bbl.sx, bbl.sy);
+    c.closePath();
+    c.fillStyle = PALETTE.wallAccent;
+    c.fill();
+  }
+  // Windows (columns 4-7)
+  for (let gx = 4; gx < 8; gx++) {
+    const wy1 = 1.0, wy2 = 2.6;
+    const bl = toIso(gx + 0.1, 0, wy1);
+    const br = toIso(gx + 0.9, 0, wy1);
+    const tr = toIso(gx + 0.9, 0, wy2);
+    const tl = toIso(gx + 0.1, 0, wy2);
+    // Sky
+    c.beginPath();
+    c.moveTo(tl.sx, tl.sy); c.lineTo(tr.sx, tr.sy);
+    c.lineTo(br.sx, br.sy); c.lineTo(bl.sx, bl.sy);
+    c.closePath();
+    const skyGrad = c.createLinearGradient(tl.sx, tl.sy, bl.sx, bl.sy);
+    skyGrad.addColorStop(0, '#87ceeb');
+    skyGrad.addColorStop(1, '#b8e6ff');
+    c.fillStyle = skyGrad;
+    c.fill();
+    // Glass reflection
+    c.fillStyle = 'rgba(255,255,255,0.15)';
+    c.fill();
+    // Frame
+    c.strokeStyle = PALETTE.wallAccent;
+    c.lineWidth = 1.5;
+    c.stroke();
+    // Cross bar
+    const mid = toIso(gx + 0.5, 0, (wy1 + wy2) / 2);
+    const midL = toIso(gx + 0.1, 0, (wy1 + wy2) / 2);
+    const midR = toIso(gx + 0.9, 0, (wy1 + wy2) / 2);
+    c.beginPath(); c.moveTo(midL.sx, midL.sy); c.lineTo(midR.sx, midR.sy);
+    c.strokeStyle = '#c8b8a0'; c.lineWidth = 1; c.stroke();
+  }
+  // Left wall (x=0, from y=0 to y=10)
+  for (let gy = 0; gy < GRID_H; gy++) {
+    const bl = toIso(0, gy, 0);
+    const br = toIso(0, gy + 1, 0);
+    const tr = toIso(0, gy + 1, WALL_H);
+    const tl = toIso(0, gy, WALL_H);
+    c.beginPath();
+    c.moveTo(tl.sx, tl.sy); c.lineTo(tr.sx, tr.sy);
+    c.lineTo(br.sx, br.sy); c.lineTo(bl.sx, bl.sy);
+    c.closePath();
+    c.fillStyle = PALETTE.wallSide;
+    c.fill();
+    // Baseboard
+    const bbH = 0.2;
+    const bbl = toIso(0, gy, 0);
+    const bbr = toIso(0, gy + 1, 0);
+    const btr = toIso(0, gy + 1, bbH);
+    const btl = toIso(0, gy, bbH);
+    c.beginPath();
+    c.moveTo(btl.sx, btl.sy); c.lineTo(btr.sx, btr.sy);
+    c.lineTo(bbr.sx, bbr.sy); c.lineTo(bbl.sx, bbl.sy);
+    c.closePath();
+    c.fillStyle = PALETTE.wallAccent;
+    c.fill();
+  }
+}
+
+function drawDesk(gx, gy, isBoss) {
+  const w = isBoss ? 2.2 : 1.5;
+  const d = isBoss ? 1.0 : 0.7;
+  const h = 0.55;
+  const ox = gx - w / 2, oy = gy - d / 2;
+  // Shadow
+  drawShadow(gx, gy + d / 2 + 0.1, 22, 8);
+  // Legs
+  const legH = 0.35, legW = 0.08;
+  drawIsoBox(ox + 0.1, oy + 0.1, 0, legW, legW, legH, PALETTE.deskLeg, darken(PALETTE.deskLeg, 0.8), darken(PALETTE.deskLeg, 0.7));
+  drawIsoBox(ox + w - 0.18, oy + 0.1, 0, legW, legW, legH, PALETTE.deskLeg, darken(PALETTE.deskLeg, 0.8), darken(PALETTE.deskLeg, 0.7));
+  drawIsoBox(ox + 0.1, oy + d - 0.18, 0, legW, legW, legH, PALETTE.deskLeg, darken(PALETTE.deskLeg, 0.8), darken(PALETTE.deskLeg, 0.7));
+  drawIsoBox(ox + w - 0.18, oy + d - 0.18, 0, legW, legW, legH, PALETTE.deskLeg, darken(PALETTE.deskLeg, 0.8), darken(PALETTE.deskLeg, 0.7));
+  // Desktop
+  drawIsoBox(ox, oy, legH, w, d, 0.06, PALETTE.deskTop, PALETTE.deskFront, darken(PALETTE.deskTop, 0.85));
+  if (isBoss) {
+    // Gold trim
+    drawIsoBox(ox, oy, legH + 0.06, w, d, 0.015, '#c8973e', '#a0782e', '#8a6828');
+  }
+}
+
+function drawMonitor(gx, gy, agentId, isActive) {
+  const p = toIso(gx, gy - 0.15, 0.55);
+  // Stand
+  c.fillStyle = '#555';
+  c.fillRect(p.sx - 2, p.sy - 8, 4, 8);
+  // Base
+  c.fillStyle = '#444';
+  c.beginPath();
+  c.ellipse(p.sx, p.sy, 6, 3, 0, 0, Math.PI * 2);
+  c.fill();
+  // Screen frame
+  const sw = 24, sh = 16;
+  rrect(p.sx - sw / 2 - 1, p.sy - sh - 10, sw + 2, sh + 2, 2);
+  c.fillStyle = PALETTE.monitorFrame;
+  c.fill();
+  // Screen
+  rrect(p.sx - sw / 2, p.sy - sh - 9, sw, sh, 1);
+  if (isActive) {
+    c.fillStyle = '#0d1117';
+    c.fill();
+    // Code lines
+    const t = state.time / 1000;
+    c.save();
+    c.beginPath();
+    rrect(p.sx - sw / 2, p.sy - sh - 9, sw, sh, 1);
+    c.clip();
+    for (let i = 0; i < 6; i++) {
+      const lw = 6 + Math.sin(t + i * 1.3) * 4;
+      const agent = AGENT_DEFS.find(a => a.id === agentId);
+      c.fillStyle = agent ? agent.color + '80' : '#5cc87880';
+      c.fillRect(p.sx - sw / 2 + 2, p.sy - sh - 7 + i * 2.5, lw, 1.5);
+    }
+    // Cursor blink
+    if (Math.sin(t * 4) > 0) {
+      c.fillStyle = '#fff';
+      c.fillRect(p.sx - sw / 2 + 2 + 8, p.sy - sh - 7 + 2, 1, 2);
+    }
+    c.restore();
+  } else {
+    // Screensaver - dark with moving dot
+    c.fillStyle = '#111118';
+    c.fill();
+    const t2 = state.time / 2000;
+    c.fillStyle = '#333355';
+    c.beginPath();
+    c.arc(p.sx + Math.sin(t2) * 6, p.sy - sh / 2 - 5 + Math.cos(t2 * 1.3) * 4, 2, 0, Math.PI * 2);
+    c.fill();
+  }
+}
+
+function drawChair(gx, gy, isBoss) {
+  const p = toIso(gx, gy + 0.35, 0);
+  const seatH = 0.32;
+  const sw = isBoss ? 0.6 : 0.45;
+  // Chair base / wheels
+  c.fillStyle = '#555';
+  c.beginPath();
+  c.ellipse(p.sx, p.sy + 2, 8, 4, 0, 0, Math.PI * 2);
+  c.fill();
+  // Seat
+  drawIsoBox(gx - sw / 2, gy + 0.35 - sw / 2, seatH - 0.04, sw, sw, 0.04,
+    PALETTE.chairSeat, darken(PALETTE.chairSeat, 0.85), darken(PALETTE.chairSeat, 0.7));
+  // Back rest
+  if (isBoss) {
+    // High back chair
+    drawIsoBox(gx - sw / 2, gy + 0.35 + sw / 2 - 0.05, seatH, 0.06, sw, 0.65,
+      darken(PALETTE.chairBack, 1.1), PALETTE.chairBack, darken(PALETTE.chairBack, 0.8));
+    // Armrests
+    drawIsoBox(gx - sw / 2, gy + 0.35 - sw / 2 + 0.05, seatH, 0.05, 0.25, 0.12,
+      '#4a5568', '#3d4758', '#333d4a');
+    drawIsoBox(gx + sw / 2 - 0.05, gy + 0.35 - sw / 2 + 0.05, seatH, 0.05, 0.25, 0.12,
+      '#4a5568', '#3d4758', '#333d4a');
+  } else {
+    drawIsoBox(gx - 0.15, gy + 0.35 + sw / 2 - 0.05, seatH, 0.04, 0.3, 0.4,
+      darken(PALETTE.chairBack, 1.1), PALETTE.chairBack, darken(PALETTE.chairBack, 0.8));
+  }
+}
+
+function drawBookshelf(gx, gy) {
+  drawShadow(gx + 0.3, gy + 0.3, 14, 6);
+  drawIsoBox(gx, gy, 0, 0.5, 0.8, 1.8, '#8b7355', '#7a6348', '#6b553d');
+  // Shelves
+  for (let s = 0; s < 3; s++) {
+    drawIsoBox(gx + 0.02, gy + 0.02, 0.4 + s * 0.5, 0.46, 0.76, 0.03, '#9b8365', '#8a7358', '#7b6349');
+    // Books
+    const colors = ['#c0392b','#2980b9','#27ae60','#f39c12','#8e44ad','#e74c3c'];
+    for (let b = 0; b < 4; b++) {
+      const bx = gx + 0.06 + b * 0.1;
+      drawIsoBox(bx, gy + 0.1, 0.43 + s * 0.5, 0.08, 0.4, 0.38,
+        colors[(s * 4 + b) % colors.length],
+        darken(colors[(s * 4 + b) % colors.length], 0.8),
+        darken(colors[(s * 4 + b) % colors.length], 0.65));
+    }
+  }
+}
+
+function drawPlant(gx, gy) {
+  const p = toIso(gx, gy, 0);
+  drawShadow(gx, gy, 10, 5);
+  // Pot
+  drawIsoBox(gx - 0.15, gy - 0.15, 0, 0.3, 0.3, 0.35, '#b5651d', '#a0571a', '#8b4a15');
+  // Soil
+  drawIsoBox(gx - 0.12, gy - 0.12, 0.35, 0.24, 0.24, 0.03, '#5a3e2b', '#4d3425', '#3f2a1e');
+  // Leaves
+  const t = state.time / 1500;
+  const leaf = toIso(gx, gy, 0.55);
+  c.save();
+  const sway = Math.sin(t) * 2;
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2 + t * 0.3;
+    const lx = leaf.sx + Math.cos(angle) * (10 + Math.sin(t + i) * 2) + sway;
+    const ly = leaf.sy + Math.sin(angle) * 5 - 5;
+    c.fillStyle = i % 2 === 0 ? '#4a9e5c' : '#3d8a4e';
+    c.beginPath();
+    c.ellipse(lx, ly, 7, 4, angle, 0, Math.PI * 2);
+    c.fill();
+  }
+  // Stem
+  c.strokeStyle = '#3d7a3e';
+  c.lineWidth = 1.5;
+  c.beginPath();
+  c.moveTo(leaf.sx, leaf.sy + 8);
+  c.lineTo(leaf.sx + sway * 0.3, leaf.sy - 4);
+  c.stroke();
+  c.restore();
+}
+
+function drawSofa(gx, gy) {
+  drawShadow(gx + 0.5, gy + 0.4, 20, 8);
+  // Base
+  drawIsoBox(gx, gy, 0, 1.6, 0.7, 0.25, '#5a4a6a', '#4d3f5d', '#403450');
+  // Seat cushion
+  drawIsoBox(gx + 0.05, gy + 0.05, 0.25, 1.5, 0.5, 0.12, '#6b5a7e', '#5e4d71', '#524164');
+  // Back
+  drawIsoBox(gx + 0.05, gy + 0.55, 0.25, 1.5, 0.12, 0.45, '#5a4a6a', '#4d3f5d', '#403450');
+  // Cushions
+  drawIsoBox(gx + 0.2, gy + 0.1, 0.37, 0.35, 0.35, 0.08, '#e88ec4', '#d47ab0', '#c066a0');
+  drawIsoBox(gx + 1.0, gy + 0.1, 0.37, 0.35, 0.35, 0.08, '#87ceeb', '#74bbda', '#62a8c9');
+}
+
+function drawCoffeeTable(gx, gy) {
+  drawShadow(gx + 0.3, gy + 0.25, 14, 6);
+  drawIsoBox(gx, gy, 0, 0.8, 0.5, 0.05, '#b8a888', '#a89878', '#988868');
+  // Legs
+  const legPos = [[0.05,0.05],[0.7,0.05],[0.05,0.4],[0.7,0.4]];
+  legPos.forEach(([lx, ly]) => {
+    drawIsoBox(gx + lx, gy + ly, 0.05, 0.05, 0.05, 0.2, '#a89878', '#988868', '#887858');
+  });
+  drawIsoBox(gx + 0.05, gy + 0.05, 0.25, 0.7, 0.4, 0.03, PALETTE.deskTop, PALETTE.deskFront, darken(PALETTE.deskTop, 0.85));
+  // Coffee mug
+  const mugP = toIso(gx + 0.55, gy + 0.2, 0.32);
+  c.fillStyle = '#fff';
+  c.beginPath();
+  c.ellipse(mugP.sx, mugP.sy, 4, 2.5, 0, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = '#eee';
+  c.fillRect(mugP.sx - 3, mugP.sy - 1, 6, 5);
+  c.fillStyle = '#6b4226';
+  c.beginPath();
+  c.ellipse(mugP.sx, mugP.sy, 3, 1.8, 0, 0, Math.PI * 2);
+  c.fill();
+  // Steam
+  const st = state.time / 800;
+  c.strokeStyle = 'rgba(255,255,255,0.25)';
+  c.lineWidth = 1;
+  for (let i = 0; i < 3; i++) {
+    c.beginPath();
+    const sx = mugP.sx - 2 + i * 2;
+    c.moveTo(sx, mugP.sy - 3);
+    c.quadraticCurveTo(sx + Math.sin(st + i) * 3, mugP.sy - 8, sx + Math.sin(st + i + 1) * 2, mugP.sy - 13);
+    c.stroke();
+  }
+}
+
+function drawServerRack(gx, gy) {
+  drawShadow(gx + 0.2, gy + 0.25, 12, 6);
+  drawIsoBox(gx, gy, 0, 0.5, 0.5, 1.6, '#2d3748', '#252f3f', '#1e2736');
+  // LED lights
+  const t = state.time / 300;
+  for (let i = 0; i < 6; i++) {
+    const lp = toIso(gx + 0.12, gy, 0.2 + i * 0.22);
+    const colors = ['#4ade80', '#60a5fa', '#fbbf24'];
+    const ci = Math.floor(Math.sin(t + i * 1.7) * 1.5 + 1.5) % 3;
+    const brightness = Math.sin(t * 2 + i * 0.8) > 0 ? 1 : 0.3;
+    c.fillStyle = colors[ci];
+    c.globalAlpha = brightness;
+    c.beginPath();
+    c.arc(lp.sx + 3, lp.sy + 1, 1.5, 0, Math.PI * 2);
+    c.fill();
+    c.globalAlpha = 1;
+  }
+}
+
+function drawWhiteboard(gx, gy) {
+  // Board on wall (side view)
+  drawIsoBox(gx, gy, 0.6, 1.5, 0.06, 1.2, '#f8f8f8', '#e8e8e8', '#d8d8d8');
+  // Frame
+  drawIsoBox(gx - 0.02, gy - 0.02, 0.58, 1.54, 0.02, 1.24, '#888', '#777', '#666');
+  // Sticky notes
+  const notes = [
+    {x:0.1, z:1.4, color:'#fef08a'},
+    {x:0.5, z:1.4, color:'#93c5fd'},
+    {x:0.9, z:1.4, color:'#fca5a5'},
+    {x:0.3, z:1.0, color:'#86efac'},
+    {x:0.7, z:1.0, color:'#fde68a'}
+  ];
+  notes.forEach(n => {
+    const np = toIso(gx + n.x, gy + 0.01, n.z);
+    c.fillStyle = n.color;
+    c.fillRect(np.sx - 5, np.sy - 5, 10, 10);
+    // Lines on sticky
+    c.strokeStyle = 'rgba(0,0,0,0.1)';
+    c.lineWidth = 0.5;
+    for (let l = 0; l < 3; l++) {
+      c.beginPath();
+      c.moveTo(np.sx - 3, np.sy - 3 + l * 3);
+      c.lineTo(np.sx + 3, np.sy - 3 + l * 3);
+      c.stroke();
+    }
+  });
+}
+
+function drawCat(gx, gy) {
+  const p = toIso(gx, gy, 0.05);
+  // Body
+  c.fillStyle = '#f5a623';
+  c.beginPath();
+  c.ellipse(p.sx, p.sy - 2, 8, 5, 0.1, 0, Math.PI * 2);
+  c.fill();
+  // Head
+  c.beginPath();
+  c.arc(p.sx + 7, p.sy - 4, 4, 0, Math.PI * 2);
+  c.fill();
+  // Ears
+  c.beginPath();
+  c.moveTo(p.sx + 5, p.sy - 8); c.lineTo(p.sx + 7, p.sy - 12); c.lineTo(p.sx + 9, p.sy - 8);
+  c.fill();
+  // Tail
+  c.strokeStyle = '#f5a623';
+  c.lineWidth = 2;
+  const tt = state.time / 1200;
+  c.beginPath();
+  c.moveTo(p.sx - 7, p.sy - 2);
+  c.quadraticCurveTo(p.sx - 12, p.sy - 8 + Math.sin(tt) * 3, p.sx - 10, p.sy - 12);
+  c.stroke();
+  // Zzz
+  const zt = state.time / 600;
+  c.font = '8px Inter';
+  c.fillStyle = 'rgba(255,255,255,0.4)';
+  const zy = p.sy - 14 - Math.sin(zt) * 3;
+  c.fillText('z', p.sx + 10, zy);
+  c.fillText('Z', p.sx + 14, zy - 5);
+  c.fillText('Z', p.sx + 11, zy - 10);
+}
+
+function drawWallClock(gx, gy) {
+  const CLOCK_Z = 2.2;
+  const p = toIso(gx, gy, CLOCK_Z);
+  // Back plate (on back wall, so draw as circle)
+  c.fillStyle = '#fff';
+  c.beginPath();
+  c.arc(p.sx, p.sy, 12, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = '#c8b8a0';
+  c.lineWidth = 1.5;
+  c.stroke();
+  // Hands
+  const now = new Date();
+  const h = now.getHours() % 12, m = now.getMinutes(), s = now.getSeconds();
+  // Hour hand
+  const ha = (h + m / 60) * Math.PI / 6 - Math.PI / 2;
+  c.strokeStyle = '#333';
+  c.lineWidth = 2;
+  c.beginPath();
+  c.moveTo(p.sx, p.sy);
+  c.lineTo(p.sx + Math.cos(ha) * 6, p.sy + Math.sin(ha) * 6);
+  c.stroke();
+  // Minute hand
+  const ma = (m + s / 60) * Math.PI / 30 - Math.PI / 2;
+  c.lineWidth = 1.5;
+  c.beginPath();
+  c.moveTo(p.sx, p.sy);
+  c.lineTo(p.sx + Math.cos(ma) * 8, p.sy + Math.sin(ma) * 8);
+  c.stroke();
+  // Second hand
+  const sa = s * Math.PI / 30 - Math.PI / 2;
+  c.strokeStyle = '#e06878';
+  c.lineWidth = 0.8;
+  c.beginPath();
+  c.moveTo(p.sx, p.sy);
+  c.lineTo(p.sx + Math.cos(sa) * 9, p.sy + Math.sin(sa) * 9);
+  c.stroke();
+  // Center dot
+  c.fillStyle = '#333';
+  c.beginPath();
+  c.arc(p.sx, p.sy, 1.5, 0, Math.PI * 2);
+  c.fill();
+}
+
+// ============================================================
+// SECTION: CHARACTER DRAWING
+// ============================================================
+function drawCharacter(agentDef, gx, gy, isActive, isBoss) {
+  const ag = state.agents[agentDef.id];
+  const t = state.time / 1000;
+  const bobY = (isActive && ag && ag.working) ? Math.sin(t * 3 + gx) * 1.2 : 0;
+  const p = toIso(gx, gy + 0.15, 0.35);
+  const sx = p.sx, sy = p.sy + bobY;
+  const scale = isBoss ? 1.15 : 1;
+
+  // Brightness
+  const alpha = isActive ? 1.0 : 0.4;
+  c.globalAlpha = alpha;
+
+  // Body (shirt)
+  const shirtColor = isBoss ? '#2d3748' : agentDef.shirt;
+  c.fillStyle = shirtColor;
+  rrect(sx - 8 * scale, sy - 18 * scale, 16 * scale, 14 * scale, 3);
+  c.fill();
+
+  // Arms (typing animation)
+  c.fillStyle = shirtColor;
+  const armWave = (isActive && ag && ag.working) ? Math.sin(t * 6 + gx * 2) * 2 : 0;
+  // Left arm
+  c.fillRect(sx - 12 * scale, sy - 14 * scale + armWave, 5 * scale, 4 * scale);
+  // Right arm
+  c.fillRect(sx + 7 * scale, sy - 14 * scale - armWave, 5 * scale, 4 * scale);
+  // Hands (skin)
+  c.fillStyle = '#f0d0b0';
+  c.beginPath();
+  c.arc(sx - 13 * scale, sy - 12 * scale + armWave, 2.5 * scale, 0, Math.PI * 2);
+  c.fill();
+  c.beginPath();
+  c.arc(sx + 13 * scale, sy - 12 * scale - armWave, 2.5 * scale, 0, Math.PI * 2);
+  c.fill();
+
+  // Head
+  c.fillStyle = '#f0d0b0';
+  c.beginPath();
+  c.arc(sx, sy - 24 * scale, 7 * scale, 0, Math.PI * 2);
+  c.fill();
+
+  // Hair (back of head - facing away)
+  c.fillStyle = isBoss ? '#1a1a2e' : '#3d2817';
+  c.beginPath();
+  c.arc(sx, sy - 25 * scale, 7 * scale, -Math.PI, 0);
+  c.fill();
+  // Side hair
+  c.fillRect(sx - 7 * scale, sy - 27 * scale, 2 * scale, 6 * scale);
+  c.fillRect(sx + 5 * scale, sy - 27 * scale, 2 * scale, 6 * scale);
+
+  if (isBoss) {
+    // Gold necktie hint (visible from back as collar detail)
+    c.fillStyle = '#c8973e';
+    c.fillRect(sx - 2, sy - 18 * scale, 4, 3);
+  }
+
+  c.globalAlpha = 1;
+
+  // Role tag (always visible)
+  drawRoleTag(sx, sy - 36 * scale, agentDef, isActive, isBoss);
+
+  // Thought bubble (only when active and has thought)
+  if (isActive && ag && ag.thought) {
+    drawThoughtBubble(sx, sy - 50 * scale, ag.thought, agentDef.color);
+  }
+
+  // Confirm waiting icon
+  if (state.confirmQueue.some(cq => cq.from === agentDef.id)) {
+    const blinkAlpha = Math.sin(t * 4) > 0 ? 1 : 0.3;
+    c.globalAlpha = blinkAlpha;
+    c.font = '14px sans-serif';
+    c.fillText('📩', sx + 12, sy - 40 * scale);
+    c.globalAlpha = 1;
+  }
+
+  // Activation glow
+  if (isActive && ag && ag._justActivated) {
+    const glowAlpha = Math.max(0, 1 - (state.time - ag._activatedTime) / 2000);
+    if (glowAlpha > 0) {
+      c.strokeStyle = agentDef.color;
+      c.lineWidth = 2;
+      c.globalAlpha = glowAlpha * 0.6;
+      c.beginPath();
+      c.ellipse(sx, sy - 8, 20 + glowAlpha * 10, 12 + glowAlpha * 5, 0, 0, Math.PI * 2);
+      c.stroke();
+      c.globalAlpha = 1;
+    } else {
+      ag._justActivated = false;
+    }
+  }
+}
+
+function drawRoleTag(sx, sy, agentDef, isActive, isBoss) {
+  const label = isBoss ? '👑 社長' : agentDef.emoji + ' ' + agentDef.name;
+  c.font = '600 10px "Noto Sans JP", sans-serif';
+  const tw = c.measureText(label).width;
+  const px = 6, py = 3;
+  const tagAlpha = isActive ? 0.95 : 0.4;
+  c.globalAlpha = tagAlpha;
+  const bgColor = isBoss ? '#c8973e' : agentDef.color;
+  c.fillStyle = bgColor;
+  rrect(sx - tw / 2 - px, sy - py - 10, tw + px * 2, 14 + py, 7);
+  c.fill();
+  c.fillStyle = '#fff';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(label, sx, sy - 6);
+  c.textAlign = 'start';
+  c.textBaseline = 'alphabetic';
+  c.globalAlpha = 1;
+}
+
+function drawThoughtBubble(sx, sy, text, borderColor) {
+  c.font = '500 10px "Noto Sans JP", sans-serif';
+  // Truncate text
+  let displayText = text;
+  if (c.measureText(text).width > 140) {
+    while (c.measureText(displayText + '…').width > 140 && displayText.length > 0) {
+      displayText = displayText.slice(0, -1);
+    }
+    displayText += '…';
+  }
+  const tw = c.measureText(displayText).width;
+  const px = 8, py = 5;
+  const bw = tw + px * 2;
+  const bh = 18 + py;
+  const bx = sx - bw / 2;
+  const by = sy - bh - 8;
+
+  // Bubble
+  c.fillStyle = 'rgba(255,255,255,0.95)';
+  rrect(bx, by, bw, bh, 6);
+  c.fill();
+  c.strokeStyle = borderColor;
+  c.lineWidth = 1.5;
+  rrect(bx, by, bw, bh, 6);
+  c.stroke();
+
+  // Tail
+  c.fillStyle = 'rgba(255,255,255,0.95)';
+  c.beginPath();
+  c.moveTo(sx - 4, by + bh);
+  c.lineTo(sx, by + bh + 6);
+  c.lineTo(sx + 4, by + bh);
+  c.closePath();
+  c.fill();
+  c.beginPath();
+  c.moveTo(sx - 4, by + bh - 0.5);
+  c.lineTo(sx, by + bh + 6);
+  c.lineTo(sx + 4, by + bh - 0.5);
+  c.strokeStyle = borderColor;
+  c.lineWidth = 1.5;
+  c.stroke();
+
+  // Text
+  c.fillStyle = '#333';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(displayText, sx, by + bh / 2);
+  c.textAlign = 'start';
+  c.textBaseline = 'alphabetic';
+}
+
+// ============================================================
+// SECTION: EFFECTS
+// ============================================================
+function spawnParticles(agentId) {
+  const pos = AGENT_POS[agentId] || BOSS_POS;
+  const p = toIso(pos.gx, pos.gy, 0.5);
+  const agent = AGENT_DEFS.find(a => a.id === agentId);
+  const col = agent ? agent.color : '#c8973e';
+  for (let i = 0; i < 8; i++) {
+    particles.push({
+      x: p.sx, y: p.sy,
+      vx: (Math.random() - 0.5) * 4,
+      vy: -Math.random() * 3 - 1,
+      life: 1,
+      color: col,
+      size: Math.random() * 3 + 1
+    });
+  }
+}
+
+function spawnFloatingEmoji(agentId, emoji) {
+  const pos = AGENT_POS[agentId] || BOSS_POS;
+  const p = toIso(pos.gx, pos.gy, 0.8);
+  floatingEmojis.push({
+    x: p.sx, y: p.sy - 20,
+    emoji: emoji,
+    life: 1,
+    vy: -0.8
+  });
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.12; // gravity
+    p.life -= 0.02;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    c.globalAlpha = p.life;
+    c.fillStyle = p.color;
+    c.beginPath();
+    c.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    c.fill();
+  });
+  c.globalAlpha = 1;
+}
+
+function updateFloatingEmojis(dt) {
+  for (let i = floatingEmojis.length - 1; i >= 0; i--) {
+    const e = floatingEmojis[i];
+    e.y += e.vy;
+    e.x += Math.sin(state.time / 300 + i) * 0.3;
+    e.life -= 0.012;
+    if (e.life <= 0) floatingEmojis.splice(i, 1);
+  }
+}
+
+function drawFloatingEmojis() {
+  floatingEmojis.forEach(e => {
+    c.globalAlpha = e.life;
+    c.font = '20px sans-serif';
+    c.textAlign = 'center';
+    c.fillText(e.emoji, e.x, e.y);
+    c.textAlign = 'start';
+  });
+  c.globalAlpha = 1;
+}
+
+function showPhaseOverlay(phase) {
+  const overlay = document.getElementById('phaseOverlay');
+  overlay.querySelector('.phase-num').textContent = 'Phase ' + phase;
+  overlay.querySelector('.phase-name').textContent = PHASE_NAMES[phase] || '';
+  overlay.classList.add('visible');
+  setTimeout(() => overlay.classList.remove('visible'), 1800);
+}
+
+function spawnCelebration() {
+  // Confetti for all agents
+  const allIds = AGENT_DEFS.map(a => a.id);
+  allIds.forEach(id => {
+    for (let i = 0; i < 5; i++) spawnParticles(id);
+    spawnFloatingEmoji(id, '🎉');
+  });
+  spawnFloatingEmoji('boss', '🎉');
+}
+
+// ============================================================
+// SECTION: MAIN DRAW
+// ============================================================
+function draw() {
+  try {
+    c.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Background gradient
+    const bgGrad = c.createLinearGradient(0, 0, 0, canvas.height);
+    bgGrad.addColorStop(0, '#2a2236');
+    bgGrad.addColorStop(1, '#1a1520');
+    c.fillStyle = bgGrad;
+    c.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Floor
+    drawFloor();
+
+    // Walls
+    drawWalls();
+    drawWallClock(9.5, 0);
+
+    // Collect all drawable objects for depth sorting
+    const drawables = [];
+
+    // Furniture (static)
+    // Bookshelves
+    drawables.push({y: 1.2, z: 0, draw: () => drawBookshelf(0.2, 1)});
+    drawables.push({y: 1.2, z: 0, draw: () => drawBookshelf(11.3, 1)});
+
+    // Plants
+    drawables.push({y: 4.2, z: 0, draw: () => drawPlant(0.4, 4)});
+    drawables.push({y: 4.2, z: 0, draw: () => drawPlant(11.2, 4)});
+    drawables.push({y: 7.2, z: 0, draw: () => drawPlant(0.4, 7)});
+    drawables.push({y: 7.2, z: 0, draw: () => drawPlant(11.2, 7)});
+    drawables.push({y: 9.5, z: 0, draw: () => drawPlant(10.2, 9.3)});
+
+    // Sofa area
+    drawables.push({y: 8.5, z: 0, draw: () => drawSofa(0.3, 8.2)});
+    drawables.push({y: 8.5, z: 0, draw: () => drawCoffeeTable(2.0, 8.3)});
+    drawables.push({y: 9.2, z: 0, draw: () => drawCat(2.8, 9.2)});
+
+    // Server rack
+    drawables.push({y: 8.5, z: 0, draw: () => drawServerRack(11, 8.2)});
+
+    // Whiteboard
+    drawables.push({y: 5.8, z: 0, draw: () => drawWhiteboard(9.5, 5.5)});
+
+    // Agent workstations
+    AGENT_DEFS.forEach(agentDef => {
+      const pos = AGENT_POS[agentDef.id];
+      const isActive = state.agents[agentDef.id].active;
+      drawables.push({
+        y: pos.gy + 0.4,
+        z: 0,
+        draw: () => {
+          drawDesk(pos.gx, pos.gy, false);
+          drawChair(pos.gx, pos.gy, false);
+          drawCharacter(agentDef, pos.gx, pos.gy, isActive, false);
+          drawMonitor(pos.gx, pos.gy, agentDef.id, isActive);
+        }
+      });
+    });
+
+    // Boss workstation
+    const bossAgent = {id:'boss', name:'社長', role:'最高責任者', color:'#c8973e', shirt:'#2d3748', emoji:'👑'};
+    drawables.push({
+      y: BOSS_POS.gy + 0.4,
+      z: 0,
+      draw: () => {
+        drawDesk(BOSS_POS.gx, BOSS_POS.gy, true);
+        drawChair(BOSS_POS.gx, BOSS_POS.gy, true);
+        drawCharacter(bossAgent, BOSS_POS.gx, BOSS_POS.gy, true, true);
+        drawMonitor(BOSS_POS.gx, BOSS_POS.gy, 'boss', true);
+      }
+    });
+
+    // Desk lamp glow for active agents
+    AGENT_DEFS.forEach(agentDef => {
+      const pos = AGENT_POS[agentDef.id];
+      const ag = state.agents[agentDef.id];
+      if (ag.active && ag.working) {
+        const lampP = toIso(pos.gx + 0.4, pos.gy - 0.2, 0.7);
+        drawables.push({
+          y: pos.gy - 0.1,
+          z: 1,
+          draw: () => {
+            c.fillStyle = agentDef.color + '15';
+            c.beginPath();
+            c.ellipse(lampP.sx, lampP.sy + 12, 18, 10, 0, 0, Math.PI * 2);
+            c.fill();
+            // Lamp
+            const lp = toIso(pos.gx + 0.5, pos.gy - 0.15, 0.55);
+            c.fillStyle = '#333';
+            c.fillRect(lp.sx - 1, lp.sy - 8, 2, 8);
+            c.fillStyle = agentDef.color;
+            c.beginPath();
+            c.ellipse(lp.sx, lp.sy - 9, 5, 3, 0, 0, Math.PI * 2);
+            c.fill();
+          }
+        });
+      }
+    });
+
+    // Sort by y (depth), then draw
+    drawables.sort((a, b) => a.y - b.y || a.z - b.z);
+    drawables.forEach(d => d.draw());
+
+    // Draw effects on top
+    drawParticles();
+    drawFloatingEmojis();
+
+  } catch (e) {
+    console.error('Draw error:', e);
+  }
+}
+
+// ============================================================
+// SECTION: UI MANAGEMENT
+// ============================================================
+function updateUI() {
+  // Stats
+  document.getElementById('statFiles').textContent = state.stats.files;
+  document.getElementById('statLines').textContent = state.stats.lines;
+  document.getElementById('statTests').textContent = state.stats.tests;
+  document.getElementById('statBugs').textContent = state.stats.bugs;
+  document.getElementById('statPhase').textContent = state.phase + '/6';
+
+  // Phase display
+  document.getElementById('phaseText').textContent = 'Phase ' + state.phase + ': ' + (PHASE_NAMES[state.phase] || '');
+
+  // Status
+  const anyWorking = Object.values(state.agents).some(a => a.working);
+  document.getElementById('statusLabel').textContent = anyWorking ? '稼働中' : '指示待ち';
+  document.getElementById('statusDot').style.background = anyWorking ? '#5cc878' : '#c8973e';
+
+  // Agent cards
+  updateAgentCards();
+
+  // Confirm section
+  updateConfirmSection();
+}
+
+function buildAgentCards() {
+  const list = document.getElementById('agentList');
+  list.innerHTML = '';
+  AGENT_DEFS.forEach(agentDef => {
+    const card = document.createElement('div');
+    card.className = 'agent-card inactive';
+    card.id = 'card-' + agentDef.id;
+    card.style.setProperty('--agent-color', agentDef.color);
+    card.innerHTML = `
+      <div class="agent-avatar" style="background:${agentDef.color}18">${agentDef.emoji}</div>
+      <div class="agent-info">
+        <div class="name">${agentDef.name}</div>
+        <div class="role">${agentDef.role}</div>
+        <div class="action" id="action-${agentDef.id}"></div>
+        <div class="thought" id="thought-${agentDef.id}"></div>
+      </div>
+      <div class="status-indicator idle" id="status-${agentDef.id}"></div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function updateAgentCards() {
+  AGENT_DEFS.forEach(agentDef => {
+    const ag = state.agents[agentDef.id];
+    const card = document.getElementById('card-' + agentDef.id);
+    if (!card) return;
+    card.className = 'agent-card ' + (ag.active ? 'active' : 'inactive');
+    const statusEl = document.getElementById('status-' + agentDef.id);
+    if (statusEl) {
+      statusEl.className = 'status-indicator ' + (ag.working ? 'working' : (ag.active ? 'waiting' : 'idle'));
+    }
+    const actionEl = document.getElementById('action-' + agentDef.id);
+    if (actionEl) actionEl.textContent = ag.action || '';
+    const thoughtEl = document.getElementById('thought-' + agentDef.id);
+    if (thoughtEl) {
+      thoughtEl.textContent = ag.thought ? '💭 ' + ag.thought : '';
+      thoughtEl.style.display = ag.thought ? 'block' : 'none';
+    }
+    // Color avatar border
+    const avatar = card.querySelector('.agent-avatar');
+    if (avatar) avatar.style.borderColor = ag.active ? agentDef.color : 'transparent';
+  });
+}
+
+function addLog(agentId, message) {
+  const panel = document.getElementById('logPanel');
+  const now = new Date();
+  const ts = [now.getHours(), now.getMinutes(), now.getSeconds()].map(v => String(v).padStart(2, '0')).join(':');
+  const agent = AGENT_DEFS.find(a => a.id === agentId);
+  const tagName = agentId === 'boss' ? '社長' : (agent ? agent.name : 'システム');
+  const tagColor = agentId === 'boss' ? '#c8973e' : (agent ? agent.color : '#888');
+
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-time">${ts}</span> <span class="log-tag" style="background:${tagColor}30;color:${tagColor}">${tagName}</span> ${escapeHTML(message)}`;
+  panel.appendChild(line);
+
+  // Limit lines
+  while (panel.children.length > 100) panel.removeChild(panel.firstChild);
+  panel.scrollTop = panel.scrollHeight;
+
+  state.logs.push({ts, agent: agentId, msg: message});
+}
+
+function escapeHTML(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function addConfirm(fromAgent, msg) {
+  const id = ++state.confirmIdCounter;
+  state.confirmQueue.push({id, from: fromAgent, msg, resolved: false});
+  updateConfirmSection();
+}
+
+function updateConfirmSection() {
+  const section = document.getElementById('confirmSection');
+  const list = document.getElementById('confirmList');
+  const badge = document.getElementById('confirmBadge');
+  const pending = state.confirmQueue.filter(c => !c.resolved);
+
+  if (pending.length === 0) {
+    section.classList.remove('visible');
+    return;
+  }
+  section.classList.add('visible');
+  badge.textContent = pending.length + '件';
+
+  list.innerHTML = '';
+  pending.forEach(conf => {
+    const agent = AGENT_DEFS.find(a => a.id === conf.from);
+    const card = document.createElement('div');
+    card.className = 'confirm-card';
+    card.innerHTML = `
+      <div class="from">${agent ? agent.emoji + ' ' + agent.name : '📋 リード'}より</div>
+      <div class="msg">${escapeHTML(conf.msg)}</div>
+      <div class="confirm-btns">
+        <button class="btn-approve" onclick="resolveConfirm(${conf.id},'approve')">✅ 承認</button>
+        <button class="btn-reject" onclick="resolveConfirm(${conf.id},'reject')">❌ 却下</button>
+        <button class="btn-reply" onclick="resolveConfirm(${conf.id},'reply')">💬 返信</button>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function resolveConfirm(id, action) {
+  const conf = state.confirmQueue.find(c => c.id === id);
+  if (!conf) return;
+  conf.resolved = true;
+  const labels = {approve: '承認しました', reject: '却下しました', reply: '返信しました'};
+  addLog('boss', '📩 ' + labels[action]);
+  setTimeout(() => {
+    state.confirmQueue = state.confirmQueue.filter(c => !c.resolved);
+    updateConfirmSection();
+  }, 3000);
+  updateConfirmSection();
+  // Resume simulation if paused for confirm
+  if (state.mode === 'demo' && state.running && state._pausedForConfirm) {
+    state._pausedForConfirm = false;
+    advanceDemo();
+  }
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    [now.getHours(), now.getMinutes(), now.getSeconds()].map(v => String(v).padStart(2, '0')).join(':');
+}
+
+function updateActiveAgents() {
+  const activeIds = PHASE_ACTIVE[state.phase] || [];
+  AGENT_DEFS.forEach(agentDef => {
+    const ag = state.agents[agentDef.id];
+    const wasActive = ag.active;
+    ag.active = activeIds.includes(agentDef.id);
+    if (ag.active && !wasActive) {
+      ag._justActivated = true;
+      ag._activatedTime = state.time;
+    }
+    if (!ag.active) {
+      ag.working = false;
+      ag.action = '';
+      ag.thought = '';
+    }
+  });
+}
+
+// ============================================================
+// SECTION: SIMULATION (Demo Events)
+// ============================================================
+const DEMO_EVENTS = [
+  // Phase 1: 設計 (lead only)
+  {phase:1,a:'lead',t:'新作ゲームの企画を開始します',d:3000,e:'📋',s:'files',n:1,
+   th:'GTA6のオープンワールド規模すごいな…Web技術で差別化しよう'},
+  {phase:1,a:'lead',t:'市場調査: 最近のゲームトレンドを分析中',d:3500,e:'🔍',s:'files',n:1,
+   th:'紅の砂漠のアクション性とSlay the Spire 2の中毒性を融合させたい'},
+  {phase:1,a:'lead',t:'コンセプト策定: ローグライク×タワーディフェンス',d:3000,e:'💡',s:'files',n:1,
+   th:'ローグライク×タワーディフェンスの組み合わせはどうか'},
+  {phase:1,a:'lead',t:'アーキテクチャ設計書を作成',d:4000,e:'📐',s:'files',n:2,s2:'lines',n2:150,
+   th:'Metropolis 1998みたいなアイソメトリック視点も良いな'},
+  {phase:1,a:'lead',t:'タスク分割完了 → 6つのサブタスクに分割',d:3000,e:'📊',s:'files',n:1,
+   th:'Phantom Blade Zeroの戦闘システム参考にしよう'},
+  {phase:1,a:'lead',t:'ゲームデザインドキュメント(GDD)完成',d:3500,e:'📝',s:'files',n:3,
+   th:'REANIMALの世界観デザイン、参考になるな…'},
+  {phase:1,a:'lead',t:'社長に設計方針の確認を依頼',d:2000,e:'📩',
+   confirm:{msg:'Canvas+WebGLハイブリッド構成でよいですか？'}},
+  {phase:1,a:'lead',t:'ステージ構成について確認依頼',d:2000,e:'📩',
+   confirm:{msg:'ステージ制 vs オープンフィールド、どちらで進めますか？'}},
+
+  // Phase 2: 実装 (lead, developer, ui-designer)
+  {phase:2,a:'developer',t:'ゲームエンジンのコア実装を開始',d:3000,e:'⌨️',s:'files',n:2,
+   th:'60fps固定でrequestAnimationFrame使おう'},
+  {phase:2,a:'developer',t:'物理エンジン: 衝突判定システム実装',d:4000,e:'🎮',s:'lines',n:280,
+   th:'仁王3の当たり判定精度すごかった…参考にしよう'},
+  {phase:2,a:'ui-designer',t:'UI/UXデザインシステムの構築開始',d:3000,e:'🎨',s:'files',n:3,
+   th:'ドラクエ7リメイクのHD-2D感をWeb技術で再現したい'},
+  {phase:2,a:'lead',t:'進捗確認: コア実装40%完了',d:2000,e:'📋',
+   th:'Fableのナラティブシステム、うちのゲームにも組み込みたい'},
+  {phase:2,a:'developer',t:'レンダリングパイプライン完成',d:4500,e:'✨',s:'lines',n:450,
+   th:'プラグマタのリアルタイムレンダリング技術すごいな'},
+  {phase:2,a:'ui-designer',t:'レスポンシブUI実装完了',d:3500,e:'📱',s:'lines',n:320,
+   th:'バイオハザード レクイエムのUI、ミニマルで良い参考になる'},
+  {phase:2,a:'developer',t:'敵AIのパスファインディング実装',d:4000,e:'🤖',s:'lines',n:380,
+   th:'Metropolis 1998みたいなアイソメトリック視点のAI設計がいい'},
+  {phase:2,a:'lead',t:'社長に実装方針の確認を依頼',d:2000,e:'📩',
+   confirm:{msg:'リアルタイムアクション vs ターン制、どちらにしますか？'}},
+  {phase:2,a:'developer',t:'サウンドシステム実装',d:3000,e:'🔊',s:'lines',n:200,
+   th:'マーベル格ゲーのSEデザイン参考にしよう'},
+  {phase:2,a:'ui-designer',t:'アニメーションシステム統合',d:3500,e:'🎬',s:'lines',n:250,
+   th:'紅の砂漠のキャラモーション、なめらかすぎる'},
+  {phase:2,a:'lead',t:'外部ライブラリ導入の確認依頼',d:2000,e:'📩',
+   confirm:{msg:'外部ライブラリ(Tone.js)を導入してよいですか？バンドル+25KB'}},
+
+  // Phase 3: レビュー (tester, reviewer)
+  {phase:3,a:'tester',t:'ユニットテスト作成開始',d:3000,e:'🧪',s:'tests',n:5,
+   th:'当たり判定のエッジケース網羅しとこう'},
+  {phase:3,a:'reviewer',t:'コードレビュー開始: コアモジュール',d:3500,e:'👀',s:'files',n:0,
+   th:'マジックナンバー多い…定数化を提案しよう'},
+  {phase:3,a:'tester',t:'結合テスト実行中',d:4000,e:'🔗',s:'tests',n:8,
+   th:'GTA6級の複合テストケース書いてやる'},
+  {phase:3,a:'reviewer',t:'設計パターンの改善提案を作成',d:3000,e:'📝',s:'files',n:1,
+   th:'Slay the Spire 2のコードベース、きれいなんだろうな'},
+  {phase:3,a:'tester',t:'パフォーマンステスト: 60fps維持確認',d:3500,e:'⚡',s:'tests',n:3,
+   th:'REANIMALのローディング速度、目標にしよう'},
+  {phase:3,a:'reviewer',t:'社長に設計パターンの確認を依頼',d:2000,e:'📩',
+   confirm:{msg:'パフォーマンスに影響する設計パターンを発見。修正方針を確認させてください'}},
+
+  // Phase 4: バグ修正 (debugger, developer)
+  {phase:4,a:'debugger',t:'バグレポート分析開始',d:3000,e:'🔍',s:'bugs',n:3,
+   th:'ダブルバッファリングが必要だ…'},
+  {phase:4,a:'debugger',t:'クリティカルバグ発見: 倍率計算エラー',d:3500,e:'🐛',
+   th:'クリティカル倍率が無限になるバグ…Math.minで上限つけよう'},
+  {phase:4,a:'developer',t:'バグ修正前の状態を保存 → コミット',d:2000,e:'💾',
+   th:'Phantom Blade Zeroも初期はバグ多かったらしいし'},
+  {phase:4,a:'developer',t:'衝突判定の修正パッチ適用',d:4000,e:'🔧',s:'lines',n:45,
+   th:'壁貫通バグ、前のプロジェクトでも苦労したな'},
+  {phase:4,a:'debugger',t:'メモリリーク検出 → 修正完了',d:3500,e:'🔍',s:'bugs',n:-1,
+   th:'dispose()忘れは3Dゲームの定番バグだ'},
+  {phase:4,a:'developer',t:'全修正パッチ適用完了',d:3000,e:'✅',s:'bugs',n:-2,
+   th:'バイオハザード レクイエムの安定性を目指す'},
+
+  // Phase 5: 最終QA (tester, qa)
+  {phase:5,a:'tester',t:'総合テスト開始: 全機能検証',d:4000,e:'🧪',s:'tests',n:10,
+   th:'全ブラウザで動作確認するぞ'},
+  {phase:5,a:'qa',t:'セキュリティ監査開始',d:3500,e:'🔒',
+   th:'XSS対策は問題なし。入力サニタイズ確認完了'},
+  {phase:5,a:'tester',t:'クロスブラウザテスト完了',d:3000,e:'🌐',s:'tests',n:5,
+   th:'Safari対応が一番厄介だった…'},
+  {phase:5,a:'qa',t:'アクセシビリティチェック完了',d:3000,e:'♿',s:'tests',n:3,
+   th:'WAI-ARIA対応も完璧だ'},
+  {phase:5,a:'qa',t:'最終品質レポート作成',d:3500,e:'📊',s:'files',n:1,
+   th:'品質基準クリア！自信を持ってデプロイできる'},
+  {phase:5,a:'qa',t:'社長にデプロイ準備完了を報告',d:2000,e:'📩',
+   confirm:{msg:'デプロイ準備完了。GitHub Pagesにデプロイしてよいですか？'}},
+
+  // Phase 6: デプロイ (lead, developer)
+  {phase:6,a:'developer',t:'本番ビルド実行中',d:3000,e:'🏗️',s:'files',n:1,
+   th:'最適化完了…バンドルサイズ最小化'},
+  {phase:6,a:'developer',t:'GitHub Pagesへデプロイ中',d:4000,e:'🚀',
+   th:'デプロイスクリプト実行中…'},
+  {phase:6,a:'lead',t:'デプロイ完了確認: 本番環境テスト',d:3000,e:'✅',
+   th:'本番環境で動作確認OK！'},
+  {phase:6,a:'lead',t:'全工程完了！ゲームギャラリーの新作として公開！',d:3000,e:'🎉',
+   th:'ゲームギャラリーの新作として公開するぞ！'},
+  {phase:6,a:'lead',t:'🎊 プロジェクト完了 🎊',d:1000,e:'🎉',_celebrate:true}
+];
+
+function startDemo() {
+  state.mode = 'demo';
+  state.running = true;
+  state.eventIndex = 0;
+  state.phase = 0;
+  state.stats = {files: 0, lines: 0, tests: 0, bugs: 0};
+  state.confirmQueue = [];
+  AGENT_DEFS.forEach(a => {
+    const ag = state.agents[a.id];
+    ag.active = false; ag.working = false; ag.action = ''; ag.thought = '';
+  });
+  document.getElementById('logPanel').innerHTML = '';
+  addLog('boss', '🎬 デモモード開始: 新作ゲーム開発プロジェクト');
+  updateUI();
+  advanceDemo();
+}
+
+function advanceDemo() {
+  if (!state.running || state.mode !== 'demo') return;
+  if (state.eventIndex >= DEMO_EVENTS.length) {
+    state.running = false;
+    addLog('boss', '✨ デモ完了');
+    updateUI();
+    return;
+  }
+
+  const ev = DEMO_EVENTS[state.eventIndex];
+  state.eventIndex++;
+
+  // Process event
+  processDevEvent(ev);
+
+  // Handle extra stats
+  if (ev.s2 && ev.n2) {
+    state.stats[ev.s2] = (state.stats[ev.s2] || 0) + ev.n2;
+  }
+
+  // Celebration
+  if (ev._celebrate) {
+    spawnCelebration();
+  }
+
+  // If this event has a confirm, pause
+  if (ev.confirm) {
+    state._pausedForConfirm = true;
+    // Auto-resume after timeout if user doesn't respond
+    setTimeout(() => {
+      if (state._pausedForConfirm) {
+        state._pausedForConfirm = false;
+        advanceDemo();
+      }
+    }, 8000 / state.speed);
+    return;
+  }
+
+  // Schedule next event
+  const delay = (ev.d || 3000) / state.speed;
+  state.eventTimer = setTimeout(() => {
+    // Clear previous agent working state after a bit
+    if (ev.a) {
+      const ag = state.agents[ev.a];
+      if (ag) {
+        ag.working = false;
+        // Keep thought for a bit
+        setTimeout(() => { if (ag) ag.thought = ''; }, 1500 / state.speed);
+      }
+    }
+    advanceDemo();
+  }, delay);
+}
+
+function stopDemo() {
+  state.running = false;
+  if (state.eventTimer) clearTimeout(state.eventTimer);
+}
+
+// ============================================================
+// SECTION: COMMAND PROCESSING (Manual Mode)
+// ============================================================
+function simulateResponse(text) {
+  addLog('boss', '📢 ' + text);
+
+  // Simple keyword-based agent assignment
+  let agentId = 'lead';
+  const lower = text.toLowerCase();
+  if (lower.includes('実装') || lower.includes('コード') || lower.includes('ビルド')) agentId = 'developer';
+  else if (lower.includes('テスト') || lower.includes('検証')) agentId = 'tester';
+  else if (lower.includes('バグ') || lower.includes('修正') || lower.includes('エラー')) agentId = 'debugger';
+  else if (lower.includes('レビュー') || lower.includes('品質')) agentId = 'reviewer';
+  else if (lower.includes('UI') || lower.includes('デザイン') || lower.includes('スタイル')) agentId = 'ui-designer';
+  else if (lower.includes('セキュリティ') || lower.includes('QA') || lower.includes('確認')) agentId = 'qa';
+
+  const ag = state.agents[agentId];
+  // Activate the agent
+  ag.active = true;
+  ag.working = true;
+  ag.action = '「' + text + '」を処理中...';
+  ag.thought = '社長からの指示を確認中...';
+  updateUI();
+
+  spawnParticles(agentId);
+  spawnFloatingEmoji(agentId, '💬');
+
+  // Simulate work
+  setTimeout(() => {
+    ag.action = '指示を完了しました';
+    ag.thought = '';
+    ag.working = false;
+    addLog(agentId, '✅ 「' + text + '」→ 完了');
+    spawnFloatingEmoji(agentId, '✅');
+    updateUI();
+  }, 3000 / state.speed);
+}
+
+// ============================================================
+// SECTION: MAIN LOOP
+// ============================================================
+function mainLoop(timestamp) {
+  const now = timestamp || performance.now();
+  const rawDt = lastFrame > 0 ? (now - lastFrame) : 16.667;
+  const dt = Math.min(rawDt, 50) / 16.667;
+  lastFrame = now;
+  state.time = now;
+
+  // Update animations
+  AGENT_DEFS.forEach(a => {
+    state.agents[a.id].animPhase += 0.016 * dt;
+  });
+
+  updateParticles(dt);
+  updateFloatingEmojis(dt);
+
+  // Draw
+  draw();
+
+  // Clock
+  if (Math.floor(now / 1000) !== Math.floor((now - rawDt) / 1000)) {
+    updateClock();
+  }
+
+  requestAnimationFrame(mainLoop);
+}
+
+// ============================================================
+// SECTION: INIT
+// ============================================================
+function init() {
+  resizeCanvas();
+  buildAgentCards();
+  updateActiveAgents();
+  updateUI();
+  updateClock();
+
+  // Event listeners
+  window.addEventListener('resize', resizeCanvas);
+
+  // Command bar
+  const cmdInput = document.getElementById('cmdInput');
+  const cmdSend = document.getElementById('cmdSend');
+  cmdSend.addEventListener('click', () => {
+    const text = cmdInput.value.trim();
+    if (!text) return;
+    cmdInput.value = '';
+    sendCommand(text);
+  });
+  cmdInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const text = cmdInput.value.trim();
+      if (!text) return;
+      cmdInput.value = '';
+      sendCommand(text);
+    }
+  });
+
+  // Controls
+  document.getElementById('btnDemo').addEventListener('click', () => {
+    document.getElementById('btnDemo').classList.add('active');
+    document.getElementById('btnManual').classList.remove('active');
+    stopDemo();
+    startDemo();
+  });
+
+  document.getElementById('btnManual').addEventListener('click', () => {
+    document.getElementById('btnManual').classList.add('active');
+    document.getElementById('btnDemo').classList.remove('active');
+    stopDemo();
+    state.mode = 'manual';
+    state.running = false;
+    // Activate all agents in manual mode
+    AGENT_DEFS.forEach(a => { state.agents[a.id].active = true; });
+    addLog('boss', '🎯 手動モードに切り替えました');
+    updateUI();
+  });
+
+  document.getElementById('btnSpeed').addEventListener('click', () => {
+    const btn = document.getElementById('btnSpeed');
+    const speeds = [1, 2, 4];
+    const currentIdx = speeds.indexOf(state.speed);
+    state.speed = speeds[(currentIdx + 1) % speeds.length];
+    btn.textContent = state.speed + '×';
+  });
+
+  // Start with initial log
+  addLog('boss', '🧪 Code-Lab 司令室を起動しました');
+  addLog('boss', '💡 「▶ デモ」で自動デモ、「🎯 手動」で手動モードに切り替えられます');
+
+  // Auto start demo
+  setTimeout(() => startDemo(), 1500);
+
+  // Start render loop
+  requestAnimationFrame(mainLoop);
+}
+
+// Make resolveConfirm globally accessible
+window.resolveConfirm = resolveConfirm;
+
+// Start
+init();
+</script>
+</body>
+</html>
