@@ -348,7 +348,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
       </div>
       <!-- Secretary Chat -->
       <div class="panel-section" id="secretaryChatSection" style="display:none">
-        <div class="section-title">&#x1F4BC; 秘書チャット</div>
+        <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>&#x1F4BC; 秘書チャット</span>
+          <button id="btnCopyAnswer" onclick="copyLastAnswer()" title="最新の回答をコピー" style="display:none;background:#b388ff30;color:#b388ff;border:1px solid #b388ff50;border-radius:5px;padding:2px 8px;font-size:10px;cursor:pointer;font-weight:600">&#x1F4CB; コピー</button>
+        </div>
         <div id="secretaryChat"></div>
       </div>
       <!-- Agent List -->
@@ -2743,7 +2746,42 @@ function addSecretaryMessage(text, isUser) {
   msg.appendChild(body);
   chat.appendChild(msg);
   chat.scrollTop = chat.scrollHeight;
+  // 秘書の回答時はコピーボタンを表示
+  if (!isUser) {
+    document.getElementById('btnCopyAnswer').style.display = 'inline-block';
+  }
 }
+
+// 最新の秘書回答をクリップボードにコピー
+function copyLastAnswer() {
+  const msgs = document.querySelectorAll('#secretaryChat .sec-msg-secretary');
+  if (msgs.length === 0) return;
+  const last = msgs[msgs.length - 1];
+  const textDiv = last.querySelector('div:not(.sec-msg-label)');
+  if (!textDiv) return;
+  navigator.clipboard.writeText(textDiv.textContent).then(() => {
+    const btn = document.getElementById('btnCopyAnswer');
+    btn.textContent = '\u2705 コピー済み';
+    setTimeout(() => { btn.textContent = '\uD83D\uDCCB コピー'; }, 1500);
+  });
+}
+window.copyLastAnswer = copyLastAnswer;
+
+// Cmd+A（Ctrl+A）でチャットエリアにフォーカスがあればチャット内のみ選択
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+    const chatEl = document.getElementById('secretaryChat');
+    const section = document.getElementById('secretaryChatSection');
+    if (section && section.style.display !== 'none' && chatEl && chatEl.children.length > 0) {
+      e.preventDefault();
+      const range = document.createRange();
+      range.selectNodeContents(chatEl);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }
+});
 
 function handleQuestion(text) {
   // 質問をチャットに表示
