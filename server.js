@@ -998,6 +998,32 @@ function estimateLinesDelta(toolName, input) {
 }
 
 // ============================================================
+// SECTION: Graceful Shutdown
+// ============================================================
+function gracefulShutdown(signal) {
+  console.log('\n[SERVER] ' + signal + ' 受信 — シャットダウン中...');
+  // 全セッションのCLI子プロセスを終了
+  for (const [wsClient, session] of sessions.entries()) {
+    if (session.proc && !session.proc.killed) {
+      session.proc.kill('SIGTERM');
+      console.log('[SERVER] CLI子プロセス終了: pid=' + session.proc.pid);
+    }
+    if (wsClient.readyState === 1) {
+      wsClient.close(1001, 'Server shutting down');
+    }
+  }
+  sessions.clear();
+  httpServer.close(() => {
+    console.log('[SERVER] サーバー停止完了');
+    process.exit(0);
+  });
+  // 3秒以内に終了しなければ強制終了
+  setTimeout(() => { process.exit(1); }, 3000);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// ============================================================
 // SECTION: Start Server
 // ============================================================
 httpServer.listen(PORT, '127.0.0.1', () => {

@@ -5,5 +5,5 @@ unset CLAUDECODE
 unset CLAUDE_CODE
 unset CLAUDE_CODE_ENTRYPOINT
 unset CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
-cd /Users/shigemotoyasunari/Code-Lab
+cd "$(dirname "$0")"
 node server.js
