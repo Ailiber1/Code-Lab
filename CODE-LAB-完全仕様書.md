@@ -374,7 +374,7 @@ const PALETTE = {
 ### 9.2 server.js 仕様
 
 - WebSocketサーバー（ws モジュール）
-- ポート: 9225
+- ポート: 3456
 - メッセージタイプ:
   - `command` → Claude Code CLI に開発指示を送信
   - `question` → Claude Code CLI に質問を送信（`handleQuestion()`）

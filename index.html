@@ -2428,9 +2428,14 @@ function connectWebSocket(projectDir) {
 
   ws.onclose = (event) => {
     liveConnected = false;
+    const wasConnected = liveProjectDir;
     updateLiveStatus('disconnected', '切断 (code: ' + event.code + ')');
     addLog('boss', '\u{1F4E1} サーバーとの接続が切断されました');
     ws = null;
+    // 自動再接続（意図的な切断=code 1000以外の場合）
+    if (event.code !== 1000 && wasConnected) {
+      scheduleReconnect(wasConnected);
+    }
   };
 
   ws.onerror = () => {
@@ -2438,13 +2443,40 @@ function connectWebSocket(projectDir) {
   };
 }
 
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+const RECONNECT_MAX = 10;
+const RECONNECT_DELAYS = [2000, 3000, 5000, 5000, 10000]; // 段階的に間隔を広げる
+
+function scheduleReconnect(projectDir) {
+  if (reconnectAttempts >= RECONNECT_MAX) {
+    addLog('boss', '\u274C 自動再接続の上限に達しました。手動で再接続してください');
+    updateLiveStatus('error', '再接続失敗');
+    reconnectAttempts = 0;
+    return;
+  }
+  const delay = RECONNECT_DELAYS[Math.min(reconnectAttempts, RECONNECT_DELAYS.length - 1)];
+  reconnectAttempts++;
+  updateLiveStatus('connecting', '再接続中... (' + reconnectAttempts + '/' + RECONNECT_MAX + ') ' + (delay / 1000) + '秒後');
+  reconnectTimer = setTimeout(() => {
+    addLog('boss', '\u{1F504} 自動再接続を試行中... (' + reconnectAttempts + '/' + RECONNECT_MAX + ')');
+    connectWebSocket(projectDir);
+  }, delay);
+}
+
+function cancelReconnect() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  reconnectAttempts = 0;
+}
+
 function disconnectWebSocket() {
+  cancelReconnect();
   if (ws) {
     // 実行中のコマンドを中断
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'abort' }));
     }
-    ws.close();
+    ws.close(1000, 'User disconnect'); // code 1000 = 意図的切断
     ws = null;
   }
   liveConnected = false;
@@ -2464,6 +2496,7 @@ function handleServerMessage(msg) {
     case 'connected':
       liveConnected = true;
       liveProjectDir = msg.projectDir || '';
+      reconnectAttempts = 0; // 再接続カウンタをリセット
       updateLiveStatus('connected', '\u2705 接続完了');
       addLog('boss', '\u{1F4E1} プロジェクトに接続: ' + msg.projectDir);
       // 全エージェントをスタンバイ状態に
