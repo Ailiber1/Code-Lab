@@ -46,15 +46,40 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
   min-height:20px;max-height:120px;line-height:1.4;overflow-y:auto}
 #commandBar textarea:focus{border-color:var(--accent)}
 #commandBar textarea::placeholder{color:#ffffff40}
+#commandBar textarea.running::placeholder{color:#66e0a0;text-shadow:0 0 8px #66e0a050;font-weight:600}
 #commandBar button{background:var(--accent);color:#1a1520;border:none;
   border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:14px}
 #commandBar button:hover{filter:brightness(1.15)}
+#commandBar #btnAbort{display:none;background:#e05555;color:#fff;border:none;border-radius:8px;
+  padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px;white-space:nowrap;
+  box-shadow:0 0 10px #e0555560;animation:abortPulse 1.5s ease-in-out infinite}
+#commandBar #btnAbort:hover{filter:brightness(1.2);box-shadow:0 0 16px #e05555a0}
+@keyframes abortPulse{0%,100%{box-shadow:0 0 10px #e0555560}50%{box-shadow:0 0 20px #e05555a0}}
 #btnAttach{background:var(--accent);color:#1a1520;border:none;
   font-size:20px;font-weight:900;width:36px;height:36px;border-radius:50%;
   cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;
   transition:transform 0.1s,box-shadow 0.1s,filter 0.1s;flex-shrink:0}
 #btnAttach:hover{filter:brightness(1.2);box-shadow:0 0 8px var(--accent)}
 #btnAttach:active{transform:scale(0.85);filter:brightness(0.9)}
+
+/* ===== MODE SELECT ===== */
+#modeSelect{display:flex;align-items:center;gap:12px;justify-content:center;width:100%}
+#modeSelect .mode-label{font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap}
+.mode-btn{padding:10px 24px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;
+  transition:filter .15s,box-shadow .15s;border:1px solid transparent}
+.mode-btn.dev{background:#5cc87830;color:#5cc878;border-color:#5cc87850}
+.mode-btn.dev:hover{filter:brightness(1.2);box-shadow:0 0 12px #5cc87840}
+.mode-btn.ask{background:#b388ff30;color:#b388ff;border-color:#b388ff50}
+.mode-btn.ask:hover{filter:brightness(1.2);box-shadow:0 0 12px #b388ff40}
+#cmdInputArea{display:flex;align-items:center;gap:8px;width:100%}
+#btnModeBack{background:#ffffff20;color:var(--text);border:none;border-radius:50%;
+  width:32px;height:32px;font-size:16px;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;transition:background .15s}
+#btnModeBack:hover{background:#ffffff30}
+#cmdModeTag{font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;white-space:nowrap;flex-shrink:0}
+#cmdModeTag.dev{background:#5cc87825;color:#5cc878}
+#cmdModeTag.ask{background:#b388ff25;color:#b388ff}
+
 #attachPreview{display:none;align-items:center;gap:4px;font-size:12px;color:var(--text-dim);
   max-width:40%;overflow-x:auto;overflow-y:hidden;white-space:nowrap}
 #attachPreview.show{display:flex}
@@ -204,6 +229,20 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 #outputModal .path-input-row button{padding:6px 14px;background:var(--accent);color:#1a1520;
   border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer}
 
+/* ===== SECRETARY CHAT ===== */
+#secretaryChatSection{border-bottom:1px solid var(--border)}
+#secretaryChat{background:#0a0810;border-radius:6px;padding:8px;max-height:300px;overflow-y:auto;
+  font-family:'JetBrains Mono','Noto Sans JP',monospace;font-size:12px;line-height:1.5}
+#secretaryChat::-webkit-scrollbar{width:3px}
+#secretaryChat::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+.sec-msg{margin-bottom:6px;padding:6px 10px;border-radius:8px;max-width:85%;
+  white-space:pre-wrap;word-wrap:break-word}
+.sec-msg-user{background:#c8973e20;color:var(--text);margin-left:auto;text-align:right;
+  border-bottom-right-radius:2px}
+.sec-msg-secretary{background:#b388ff20;color:#e0d0ff;margin-right:auto;
+  border-bottom-left-radius:2px}
+.sec-msg-label{font-size:10px;font-weight:700;margin-bottom:2px;opacity:0.6}
+
 /* ===== RESPONSIVE ===== */
 @media(max-width:800px){
   #main{grid-template-columns:1fr}
@@ -233,12 +272,23 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
       </div>
       <div id="statusOverlay"><div class="overlay-title"></div><div class="overlay-sub"></div></div>
       <div id="commandBar">
-        <div class="label">社長&#x25B8;</div>
-        <button id="btnAttach" title="ファイル添付">＋</button>
-        <div id="attachPreview"><div class="file-list" id="fileList"></div></div>
-        <input type="file" id="fileInput" multiple accept=".md,.txt,.js,.ts,.html,.css,.json,.py,.java,.c,.cpp,.h,.xml,.yaml,.yml,.csv,.sh,.png,.jpg,.jpeg,.gif,.webp,.svg" style="display:none">
-        <textarea id="cmdInput" placeholder="例: ポートフォリオサイトを作って" rows="1"></textarea>
-        <button id="cmdSend">&#x25B6;</button>
+        <!-- モード選択（デフォルト表示） -->
+        <div id="modeSelect">
+          <span class="mode-label">社長&#x25B8;</span>
+          <button id="btnModeDev" class="mode-btn dev">&#x1F4CB; 開発</button>
+          <button id="btnModeAsk" class="mode-btn ask">&#x1F4AC; 質問</button>
+        </div>
+        <!-- 入力エリア（モード選択後に表示） -->
+        <div id="cmdInputArea" style="display:none">
+          <button id="btnModeBack" title="モード選択に戻る">&#x2190;</button>
+          <div id="cmdModeTag"></div>
+          <button id="btnAttach" title="ファイル添付">＋</button>
+          <div id="attachPreview"><div class="file-list" id="fileList"></div></div>
+          <input type="file" id="fileInput" multiple accept=".md,.txt,.js,.ts,.html,.css,.json,.py,.java,.c,.cpp,.h,.xml,.yaml,.yml,.csv,.sh,.png,.jpg,.jpeg,.gif,.webp,.svg" style="display:none">
+          <textarea id="cmdInput" placeholder="例: ポートフォリオサイトを作って" rows="1"></textarea>
+          <button id="cmdSend">&#x25B6;</button>
+          <button id="btnAbort" title="実行を中断">&#x23F9; 中断</button>
+        </div>
       </div>
     </div>
     <div id="sidePanel">
@@ -248,6 +298,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
           <div class="boss-avatar">&#x1F451;</div>
           <div class="boss-info"><div class="name">社長 &#x2014; あなた</div><div class="role">最高責任者</div></div>
         </div>
+      </div>
+      <!-- Secretary Chat -->
+      <div class="panel-section" id="secretaryChatSection" style="display:none">
+        <div class="section-title">&#x1F4BC; 秘書チャット</div>
+        <div id="secretaryChat"></div>
       </div>
       <!-- Agent List -->
       <div class="panel-section" id="agentListSection">
@@ -341,6 +396,12 @@ const AGENT_POS = {
 };
 const BOSS_POS = {gx:8, gy:8.5};
 
+const SECRETARY_DEF = {
+  id:'secretary', name:'秘書', role:'社長秘書・質問対応',
+  color:'#b388ff', shirt:'#7c4dff', emoji:'💼'
+};
+const SECRETARY_POS = {gx:6, gy:8.5};
+
 // ============================================================
 // SECTION: STATE
 // ============================================================
@@ -364,6 +425,10 @@ AGENT_DEFS.forEach(a => {
     active:false, working:false, action:'', thought:'', animPhase:0
   };
 });
+// 秘書エージェント初期化
+state.agents['secretary'] = {
+  active:false, working:false, action:'', thought:'', animPhase:0
+};
 
 // Effects arrays
 const particles = [];
@@ -376,27 +441,68 @@ let CONNECTION_MODE = 'simulation'; // 'simulation' | 'websocket'
 let ws = null;
 let liveConnected = false;
 let pendingFiles = []; // 添付ファイル一時保管
+let currentMode = null; // 'dev' | 'ask' | null
+
+function setMode(mode) {
+  currentMode = mode;
+  const modeSelect = document.getElementById('modeSelect');
+  const cmdInputArea = document.getElementById('cmdInputArea');
+  const cmdInput = document.getElementById('cmdInput');
+  const btnAttach = document.getElementById('btnAttach');
+  const cmdModeTag = document.getElementById('cmdModeTag');
+
+  if (mode === null) {
+    modeSelect.style.display = 'flex';
+    cmdInputArea.style.display = 'none';
+    return;
+  }
+
+  modeSelect.style.display = 'none';
+  cmdInputArea.style.display = 'flex';
+
+  if (mode === 'dev') {
+    cmdModeTag.textContent = '開発';
+    cmdModeTag.className = 'dev';
+    cmdInput.placeholder = '例: ポートフォリオサイトを作って';
+    btnAttach.style.display = 'flex';
+  } else {
+    cmdModeTag.textContent = '質問';
+    cmdModeTag.className = 'ask';
+    cmdInput.placeholder = '例: JavaScriptのクロージャーとは？';
+    btnAttach.style.display = 'none';
+  }
+  cmdInput.focus();
+}
 
 let liveCommandRunning = false;
 let liveProjectDir = ''; // 接続中のプロジェクトパス
 
-function setLiveRunning(running) {
+function setCommandRunning(running) {
   liveCommandRunning = running;
   const cmdInput = document.getElementById('cmdInput');
   const cmdSend = document.getElementById('cmdSend');
+  const btnAbort = document.getElementById('btnAbort');
   if (running) {
     cmdInput.disabled = true;
-    cmdInput.placeholder = '実行中...完了までお待ちください';
+    cmdInput.placeholder = '⚡ 実行中 … 完了までお待ちください';
+    cmdInput.classList.add('running');
     cmdSend.disabled = true;
     cmdSend.style.opacity = '0.4';
+    cmdSend.style.display = 'none';
+    btnAbort.style.display = 'inline-block';
   } else {
     cmdInput.disabled = false;
-    cmdInput.placeholder = '例: ポートフォリオサイトを作って';
+    cmdInput.placeholder = currentMode === 'ask' ? '例: JavaScriptのクロージャーとは？' : '例: ポートフォリオサイトを作って';
+    cmdInput.classList.remove('running');
     cmdSend.disabled = false;
     cmdSend.style.opacity = '1';
+    cmdSend.style.display = '';
+    btnAbort.style.display = 'none';
     cmdInput.focus();
   }
 }
+// 後方互換
+function setLiveRunning(running) { setCommandRunning(running); }
 
 // ファイル作成キーワード検出パターン（幅広くカバー）
 const CREATE_KEYWORD_RE = /作って|作成|生成|新しい|作る|作り|つくって|つくる|書いて|開発して|実装して|構築|ページ|サイト|アプリ|ゲーム|create|generate|build|make|develop|implement/i;
@@ -1025,7 +1131,7 @@ function drawWallClock(gx, gy) {
 // ============================================================
 // SECTION: CHARACTER DRAWING
 // ============================================================
-function drawCharacter(agentDef, gx, gy, isActive, isBoss) {
+function drawCharacter(agentDef, gx, gy, isActive, isBoss, isSecretary) {
   const ag = state.agents[agentDef.id];
   const t = state.time / 1000;
   const S = ps(1);
@@ -1033,17 +1139,17 @@ function drawCharacter(agentDef, gx, gy, isActive, isBoss) {
   // 椅子の座面位置に合わせる (gy+0.35 = 椅子のy, z=0.32 = 座面の高さ)
   const p = toIso(gx, gy + 0.35, 0.32);
   const sx = p.sx, sy = p.sy + bobY;
-  const sc = (isBoss ? 1.3 : 1.15) * S;
+  const sc = (isBoss ? 1.3 : isSecretary ? 1.2 : 1.15) * S;
 
   const alpha = isActive ? 1.0 : 0.4;
   c.globalAlpha = alpha;
 
   // Legs (pants) — 座った脚
-  c.fillStyle = '#3d4050';
+  c.fillStyle = isSecretary ? '#2a2a3a' : '#3d4050';
   c.fillRect(sx - 6*sc, sy - 4*sc, 5*sc, 6*sc);
   c.fillRect(sx + 1*sc, sy - 4*sc, 5*sc, 6*sc);
   // Shoes
-  c.fillStyle = '#2a2a2a';
+  c.fillStyle = isSecretary ? '#4a3030' : '#2a2a2a';
   c.fillRect(sx - 7*sc, sy + 2*sc, 6*sc, 2.5*sc);
   c.fillRect(sx + 1*sc, sy + 2*sc, 6*sc, 2.5*sc);
 
@@ -1067,18 +1173,40 @@ function drawCharacter(agentDef, gx, gy, isActive, isBoss) {
   c.fillStyle = '#f0d0b0';
   c.fillRect(sx - 2.5*sc, sy - 22*sc, 5*sc, 4*sc);
 
-  // Head — 後頭部（PC画面に向かっているので背中側）
-  const hairColor = isBoss ? '#1a1a2e' : '#3d2817';
-  // 後頭部ベース（髪で覆われた丸い頭）
-  c.fillStyle = hairColor;
-  c.beginPath(); c.arc(sx, sy - 27*sc, 8*sc, 0, Math.PI*2); c.fill();
-  // 耳（左右に肌色で小さく）
-  c.fillStyle = '#f0d0b0';
-  c.beginPath(); c.arc(sx - 8*sc, sy - 26*sc, 2*sc, 0, Math.PI*2); c.fill();
-  c.beginPath(); c.arc(sx + 8*sc, sy - 26*sc, 2*sc, 0, Math.PI*2); c.fill();
-  // 髪の毛ディテール（後頭部のふくらみ）
-  c.fillStyle = isBoss ? '#12122a' : '#2e1c0f';
-  c.beginPath(); c.arc(sx, sy - 28.5*sc, 6.5*sc, -Math.PI*0.8, Math.PI*0.8); c.fill();
+  // Head
+  if (isSecretary) {
+    // 秘書：ロングヘア（ダークブラウン）
+    const hairColor = '#4a2c2c';
+    // 後ろ髪（頭より先に描画 — 肩に掛かるロングヘア）
+    c.fillStyle = hairColor;
+    c.fillRect(sx - 9*sc, sy - 28*sc, 18*sc, 14*sc);
+    // 後ろ髪先端を丸く
+    c.beginPath();
+    c.ellipse(sx, sy - 14*sc, 9*sc, 3*sc, 0, 0, Math.PI);
+    c.fill();
+    // 後頭部ベース
+    c.beginPath(); c.arc(sx, sy - 27*sc, 8*sc, 0, Math.PI*2); c.fill();
+    // 耳（左右に肌色で小さく — 髪の隙間から少し見える）
+    c.fillStyle = '#f0d0b0';
+    c.beginPath(); c.arc(sx - 7.5*sc, sy - 26*sc, 1.8*sc, 0, Math.PI*2); c.fill();
+    c.beginPath(); c.arc(sx + 7.5*sc, sy - 26*sc, 1.8*sc, 0, Math.PI*2); c.fill();
+    // 髪のハイライト
+    c.fillStyle = '#5c3535';
+    c.beginPath(); c.arc(sx, sy - 29*sc, 6*sc, -Math.PI*0.7, Math.PI*0.7); c.fill();
+  } else {
+    // 通常キャラ/社長
+    const hairColor = isBoss ? '#1a1a2e' : '#3d2817';
+    // 後頭部ベース（髪で覆われた丸い頭）
+    c.fillStyle = hairColor;
+    c.beginPath(); c.arc(sx, sy - 27*sc, 8*sc, 0, Math.PI*2); c.fill();
+    // 耳（左右に肌色で小さく）
+    c.fillStyle = '#f0d0b0';
+    c.beginPath(); c.arc(sx - 8*sc, sy - 26*sc, 2*sc, 0, Math.PI*2); c.fill();
+    c.beginPath(); c.arc(sx + 8*sc, sy - 26*sc, 2*sc, 0, Math.PI*2); c.fill();
+    // 髪の毛ディテール（後頭部のふくらみ）
+    c.fillStyle = isBoss ? '#12122a' : '#2e1c0f';
+    c.beginPath(); c.arc(sx, sy - 28.5*sc, 6.5*sc, -Math.PI*0.8, Math.PI*0.8); c.fill();
+  }
 
   if (isBoss) {
     // 社長：襟（後ろから見える白い襟元）
@@ -1219,7 +1347,7 @@ function drawThoughtBubble(sx, sy, text, borderColor) {
 // SECTION: EFFECTS
 // ============================================================
 function spawnParticles(agentId) {
-  const pos = AGENT_POS[agentId] || BOSS_POS;
+  const pos = agentId === 'secretary' ? SECRETARY_POS : (AGENT_POS[agentId] || BOSS_POS);
   const p = toIso(pos.gx, pos.gy, 0.5);
   const agent = AGENT_DEFS.find(a => a.id === agentId);
   const col = agent ? agent.color : '#c8973e';
@@ -1236,7 +1364,7 @@ function spawnParticles(agentId) {
 }
 
 function spawnFloatingEmoji(agentId, emoji) {
-  const pos = AGENT_POS[agentId] || BOSS_POS;
+  const pos = agentId === 'secretary' ? SECRETARY_POS : (AGENT_POS[agentId] || BOSS_POS);
   const p = toIso(pos.gx, pos.gy, 0.8);
   floatingEmojis.push({
     x: p.sx, y: p.sy - 20,
@@ -1379,6 +1507,27 @@ function draw() {
       });
     });
 
+    // Secretary workstation
+    const secActive = state.agents['secretary'].active;
+    drawables.push({
+      y: SECRETARY_POS.gy - 0.2,
+      z: 0,
+      draw: () => drawMonitor(SECRETARY_POS.gx, SECRETARY_POS.gy, 'secretary', secActive)
+    });
+    drawables.push({
+      y: SECRETARY_POS.gy,
+      z: 0,
+      draw: () => drawDesk(SECRETARY_POS.gx, SECRETARY_POS.gy, false)
+    });
+    drawables.push({
+      y: SECRETARY_POS.gy + 0.5,
+      z: 0,
+      draw: () => {
+        drawChair(SECRETARY_POS.gx, SECRETARY_POS.gy, false);
+        drawCharacter(SECRETARY_DEF, SECRETARY_POS.gx, SECRETARY_POS.gy, secActive, false, true);
+      }
+    });
+
     // Boss workstation
     const bossAgent = {id:'boss', name:'社長', role:'最高責任者', color:'#c8973e', shirt:'#2d3748', emoji:'👑'};
     drawables.push({
@@ -1512,8 +1661,8 @@ function addLog(agentId, message) {
   const now = new Date();
   const ts = [now.getHours(), now.getMinutes(), now.getSeconds()].map(v => String(v).padStart(2, '0')).join(':');
   const agent = AGENT_DEFS.find(a => a.id === agentId);
-  const tagName = agentId === 'boss' ? '社長' : (agent ? agent.name : 'システム');
-  const tagColor = agentId === 'boss' ? '#c8973e' : (agent ? agent.color : '#888');
+  const tagName = agentId === 'boss' ? '社長' : agentId === 'secretary' ? '秘書' : (agent ? agent.name : 'システム');
+  const tagColor = agentId === 'boss' ? '#c8973e' : agentId === 'secretary' ? '#b388ff' : (agent ? agent.color : '#888');
 
   const line = document.createElement('div');
   line.className = 'log-line';
@@ -2043,6 +2192,9 @@ function simulateResponse(text) {
 
   updateUI();
 
+  // コマンドバーを実行中状態に（中断ボタン表示）
+  setCommandRunning(true);
+
   // 少し間を置いてから連鎖実行開始（リセットが画面に反映されてから）
   setTimeout(() => executeSimStep(), 300);
 }
@@ -2050,6 +2202,8 @@ function simulateResponse(text) {
 function executeSimStep() {
   if (simQueue.length === 0) {
     simTimer = null;
+    // コマンドバーを復帰（中断ボタン非表示）
+    setCommandRunning(false);
     // 全工程完了オーバーレイ
     showStatusOverlay('🎊 完了', '開発が完了しました', 3000);
     spawnCelebration();
@@ -2219,6 +2373,16 @@ function handleServerMessage(msg) {
       addLog('security', '\u{1F6E1}\uFE0F バックアップ作成: ' + (msg.original ? msg.original.split('/').pop() : ''));
       break;
 
+    case 'question_answer':
+      // 秘書チャットに回答を表示
+      addSecretaryMessage(msg.text || '回答を取得できませんでした。', false);
+      addLog('secretary', '💼 回答しました');
+      state.agents['secretary'].working = false;
+      state.agents['secretary'].action = '';
+      state.agents['secretary'].thought = '';
+      updateUI();
+      break;
+
     case 'error':
       setLiveRunning(false);
       addLog('boss', '\u274C エラー: ' + (msg.message || '不明なエラー'));
@@ -2256,6 +2420,14 @@ function init() {
   // Event listeners
   window.addEventListener('resize', resizeCanvas);
 
+  // モード選択ボタン
+  document.getElementById('btnModeDev').addEventListener('click', () => setMode('dev'));
+  document.getElementById('btnModeAsk').addEventListener('click', () => setMode('ask'));
+  document.getElementById('btnModeBack').addEventListener('click', () => {
+    setMode(null);
+    clearPendingFiles();
+  });
+
   // Command bar
   const cmdInput = document.getElementById('cmdInput');
   const cmdSend = document.getElementById('cmdSend');
@@ -2263,6 +2435,7 @@ function init() {
     const text = cmdInput.value.trim();
     if (!text) return;
     cmdInput.value = '';
+    if (currentMode === 'ask') { handleQuestion(text); return; }
     sendCommand(text);
   });
   cmdInput.addEventListener('keydown', (e) => {
@@ -2272,12 +2445,36 @@ function init() {
       if (!text) return;
       cmdInput.value = '';
       cmdInput.style.height = 'auto';
+      if (currentMode === 'ask') { handleQuestion(text); return; }
       sendCommand(text);
     }
   });
   cmdInput.addEventListener('input', () => {
     cmdInput.style.height = 'auto';
     cmdInput.style.height = Math.min(cmdInput.scrollHeight, 120) + 'px';
+  });
+
+  // 中断ボタン
+  document.getElementById('btnAbort').addEventListener('click', () => {
+    if (CONNECTION_MODE === 'websocket' && ws && ws.readyState === WebSocket.OPEN) {
+      // Liveモード: CLIプロセスを中断
+      ws.send(JSON.stringify({ type: 'abort' }));
+      addLog('boss', '⏹ 実行を中断しました');
+    } else {
+      // デモモード: シミュレーションを中断
+      if (simTimer) { clearTimeout(simTimer); simTimer = null; }
+      simQueue = [];
+      stopDemo();
+      addLog('boss', '⏹ シミュレーションを中断しました');
+    }
+    AGENT_DEFS.forEach(a => { state.agents[a.id].active = false; state.agents[a.id].working = false; state.agents[a.id].action = ''; state.agents[a.id].thought = ''; });
+    setCommandRunning(false);
+    updateUI();
+    // ガイドライン表示
+    addLog('boss', '💡 中断後は2つの方法があります:\n' +
+      '① 最初からやり直す →「〇〇を作って」と新しく指示\n' +
+      '② 途中から修正する →「メインカラーを青に変えて」など変更指示\n' +
+      '※ ファイルが中途半端な場合は①が安定します');
   });
 
   // ファイル添付ボタン
@@ -2396,6 +2593,58 @@ function init() {
 
   // Start render loop
   requestAnimationFrame(mainLoop);
+}
+
+// ============================================================
+// SECTION: QUESTION HANDLING (秘書エージェント)
+// ============================================================
+function addSecretaryMessage(text, isUser) {
+  const chat = document.getElementById('secretaryChat');
+  const section = document.getElementById('secretaryChatSection');
+  section.style.display = 'block';
+
+  const msg = document.createElement('div');
+  msg.className = 'sec-msg ' + (isUser ? 'sec-msg-user' : 'sec-msg-secretary');
+  const label = document.createElement('div');
+  label.className = 'sec-msg-label';
+  label.textContent = isUser ? '社長' : '💼 秘書';
+  msg.appendChild(label);
+  const body = document.createElement('div');
+  body.textContent = text;
+  msg.appendChild(body);
+  chat.appendChild(msg);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function handleQuestion(text) {
+  // 質問をチャットに表示
+  addSecretaryMessage(text, true);
+  addLog('boss', '💬 質問: ' + text);
+
+  // 秘書をアクティブに
+  const secAg = state.agents['secretary'];
+  secAg.active = true;
+  secAg.working = true;
+  secAg.action = '質問を分析中...';
+  secAg.thought = '回答を準備しています';
+  spawnParticles('secretary');
+  spawnFloatingEmoji('secretary', '💼');
+  updateUI();
+
+  if (CONNECTION_MODE === 'websocket' && ws && ws.readyState === WebSocket.OPEN) {
+    // Liveモード: サーバーに質問を送信
+    ws.send(JSON.stringify({ type: 'question', text }));
+  } else {
+    // デモモード: 定型回答を2〜3秒後に表示
+    setTimeout(() => {
+      addSecretaryMessage('ご質問ありがとうございます。Liveモードに接続すると、詳しい回答が可能です💡', false);
+      addLog('secretary', '💼 回答しました');
+      secAg.working = false;
+      secAg.action = '';
+      secAg.thought = '';
+      updateUI();
+    }, 2000 + Math.random() * 1000);
+  }
 }
 
 // Make resolveConfirm globally accessible
