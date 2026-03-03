@@ -361,7 +361,7 @@ function handleQuestion(ws, msg) {
   }
 
   const prompt = '以下の質問に簡潔に回答してください: ' + questionText;
-  const args = ['-p', prompt, '--output-format', 'stream-json'];
+  const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
 
   const proc = spawn('claude', args, {
     cwd: session.projectDir,
@@ -371,7 +371,12 @@ function handleQuestion(ws, msg) {
   });
 
   let stdoutBuffer = '';
+  let stderrBuffer = '';
   let answerText = '';
+
+  proc.stderr.on('data', (chunk) => {
+    stderrBuffer += chunk.toString();
+  });
 
   proc.stdout.on('data', (chunk) => {
     stdoutBuffer += chunk.toString();
@@ -393,10 +398,6 @@ function handleQuestion(ws, msg) {
             }
           }
         }
-        // result型の場合
-        if (parsed.type === 'result' && parsed.result) {
-          answerText += typeof parsed.result === 'string' ? parsed.result : '';
-        }
       } catch { /* ignore */ }
     }
   });
@@ -416,13 +417,13 @@ function handleQuestion(ws, msg) {
             }
           }
         }
-        if (parsed.type === 'result' && parsed.result) {
-          answerText += typeof parsed.result === 'string' ? parsed.result : '';
-        }
       } catch { /* ignore */ }
     }
 
-    const finalAnswer = answerText.trim() || (code === 0 ? '回答を取得できませんでした。' : 'エラーが発生しました。');
+    if (code !== 0 && stderrBuffer.trim()) {
+      console.error('[QUESTION] stderr:', stderrBuffer.trim());
+    }
+    const finalAnswer = answerText.trim() || (code === 0 ? '回答を取得できませんでした。' : 'エラーが発生しました。（' + (stderrBuffer.trim().slice(0, 100) || 'exit code=' + code) + '）');
     ws.send(JSON.stringify({
       type: 'question_answer',
       text: finalAnswer
