@@ -98,6 +98,9 @@ wss.on('connection', (ws, req) => {
       case 'exec_bash':
         handleExecBash(ws, msg);
         break;
+      case 'question':
+        handleQuestion(ws, msg);
+        break;
       default:
         ws.send(JSON.stringify({ type: 'error', message: 'Unknown message type: ' + msg.type }));
     }
@@ -331,6 +334,109 @@ function handleAbort(ws) {
       session.proc = null;
     }
   }, 3000);
+}
+
+// ============================================================
+// SECTION: Question Handler (秘書エージェント)
+// ============================================================
+function handleQuestion(ws, msg) {
+  const session = sessions.get(ws);
+  if (!session) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Not connected. Send "connect" first.' }));
+    return;
+  }
+
+  const questionText = msg.text;
+  if (!questionText || typeof questionText !== 'string') {
+    ws.send(JSON.stringify({ type: 'error', message: 'text is required' }));
+    return;
+  }
+
+  console.log('[QUESTION] 質問受信:', questionText.slice(0, 50));
+
+  // 環境変数からCLAUDE*を全削除（ネスト検出回避）
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith('CLAUDE') || key === 'CLAUDECODE') delete env[key];
+  }
+
+  const prompt = '以下の質問に簡潔に回答してください: ' + questionText;
+  const args = ['-p', prompt, '--output-format', 'stream-json'];
+
+  const proc = spawn('claude', args, {
+    cwd: session.projectDir,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    shell: false
+  });
+
+  let stdoutBuffer = '';
+  let answerText = '';
+
+  proc.stdout.on('data', (chunk) => {
+    stdoutBuffer += chunk.toString();
+    const lines = stdoutBuffer.split('\n');
+    stdoutBuffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const parsed = JSON.parse(line);
+        // assistantメッセージからテキストを抽出
+        if (parsed.type === 'assistant' && parsed.message) {
+          const content = parsed.message.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === 'text' && block.text) {
+                answerText += block.text;
+              }
+            }
+          }
+        }
+        // result型の場合
+        if (parsed.type === 'result' && parsed.result) {
+          answerText += typeof parsed.result === 'string' ? parsed.result : '';
+        }
+      } catch { /* ignore */ }
+    }
+  });
+
+  proc.on('close', (code) => {
+    // バッファ残り処理
+    if (stdoutBuffer.trim()) {
+      try {
+        const parsed = JSON.parse(stdoutBuffer);
+        if (parsed.type === 'assistant' && parsed.message) {
+          const content = parsed.message.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === 'text' && block.text) {
+                answerText += block.text;
+              }
+            }
+          }
+        }
+        if (parsed.type === 'result' && parsed.result) {
+          answerText += typeof parsed.result === 'string' ? parsed.result : '';
+        }
+      } catch { /* ignore */ }
+    }
+
+    const finalAnswer = answerText.trim() || (code === 0 ? '回答を取得できませんでした。' : 'エラーが発生しました。');
+    ws.send(JSON.stringify({
+      type: 'question_answer',
+      text: finalAnswer
+    }));
+    console.log('[QUESTION] 回答完了: code=' + code);
+  });
+
+  proc.on('error', (err) => {
+    ws.send(JSON.stringify({
+      type: 'question_answer',
+      text: 'Claude CLI起動失敗: ' + err.message
+    }));
+    console.error('[QUESTION] 起動エラー:', err.message);
+  });
 }
 
 // ============================================================
