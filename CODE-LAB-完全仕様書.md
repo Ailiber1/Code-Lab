@@ -381,11 +381,25 @@ const PALETTE = {
   - `abort` → 実行中のCLIプロセスを停止
   - `dev_event` → CLI出力をブラウザにリアルタイム転送
   - `question_answer` → 質問の回答をブラウザに返送
+- **Graceful Shutdown**: `SIGTERM`/`SIGINT`受信時に全CLI子プロセスを終了しゾンビ化を防止。3秒タイムアウト付き強制終了
 
-### 9.3 GitHub Pages対応
+### 9.3 WebSocket自動再接続
+
+- サーバー切断時（意図的切断=code 1000以外）に自動再接続を試行
+- 再接続間隔: 2秒→3秒→5秒→5秒→10秒（段階的に拡大）
+- 最大再接続回数: 10回。超過時は手動再接続を促すメッセージ表示
+- 接続成功時にカウンタをリセット
+- ユーザーが手動切断した場合（code 1000）は再接続しない
+
+### 9.4 GitHub Pages対応
 
 - `location.hostname !== 'localhost'` でLive関連UIを自動非表示
 - デモモードのみ動作（WebSocket接続なし）
+
+### 9.5 起動スクリプト（start.sh）
+
+- Claude Code環境変数（`CLAUDECODE`等）を除去してからサーバーを起動
+- 相対パス対応: `cd "$(dirname "$0")"` でフォルダ移動しても動作
 
 ---
 
@@ -397,14 +411,29 @@ const PALETTE = {
 
 ---
 
-## 11. ファイル構成
+## 11. 秘書チャット機能
+
+### 11.1 コピー機能
+
+- **コピーボタン**: 秘書チャットタイトル右に「📋 コピー」ボタン。最新の秘書回答をクリップボードにコピー
+- **Cmd+A チャット内選択**: 質問モードで秘書チャットが表示中にCmd+A（Ctrl+A）を押すと、チャット内テキストのみを選択（画面全体ではなく）
+
+### 11.2 Live質問処理
+
+- `claude -p` に `--output-format stream-json --verbose` で実行
+- `assistant`メッセージからのみテキストを抽出（`result`型は重複するため除外）
+- stderrの内容もエラー時にチャットに表示
+
+---
+
+## 12. ファイル構成
 
 ```
 Code-Lab/
-├── index.html              ← アプリ本体（約2800行、HTML/CSS/JS全内包）
-├── server.js               ← Node.js中継サーバー（Live接続用）
+├── index.html              ← アプリ本体（約2830行、HTML/CSS/JS全内包）
+├── server.js               ← Node.js中継サーバー（Live接続用、約1030行）
+├── start.sh                ← サーバー起動スクリプト（相対パス対応）
 ├── package.json            ← Node.js依存関係
-├── CODE-LAB-仕様書.md       ← 初期仕様書（v2）
 ├── CODE-LAB-完全仕様書.md   ← 本ファイル（v3 最新）
 ├── CODE-LAB-開発記録.md     ← 開発履歴
 └── README.md
@@ -412,7 +441,7 @@ Code-Lab/
 
 ---
 
-## 12. 技術的注意事項（必読）
+## 13. 技術的注意事項（必読）
 
 - **`c.roundRect()` は使用禁止** → `quadraticCurveTo` で角丸を描くこと
 - 描画関数内では引数名を統一し、未定義変数の参照を絶対に起こさない
