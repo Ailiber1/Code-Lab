@@ -118,9 +118,9 @@ wss.on('connection', (ws, req) => {
 // ============================================================
 function handleConnect(ws, msg) {
   let projectDir = msg.projectDir;
+  // projectDirが空の場合、サーバーの起動ディレクトリを使用
   if (!projectDir) {
-    ws.send(JSON.stringify({ type: 'error', message: 'projectDir is required' }));
-    return;
+    projectDir = __dirname;
   }
 
   // 入力のクリーニング: "cd "プレフィックスや前後の空白・引用符を除去

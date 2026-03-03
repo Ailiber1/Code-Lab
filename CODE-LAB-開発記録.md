@@ -3,7 +3,7 @@
 ## プロジェクト概要
 - **リポジトリ**: `Ailiber1/Code-Lab`
 - **GitHub Pages**: https://ailiber1.github.io/Code-Lab/
-- **ローカル**: `/Users/shigemotoyasunari/Code-Lab/`
+- **ローカル**: `Code-Lab/`（リポジトリをクローンした場所）
 
 ---
 
