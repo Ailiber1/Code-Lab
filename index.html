@@ -450,10 +450,17 @@ function setMode(mode) {
   const cmdInput = document.getElementById('cmdInput');
   const btnAttach = document.getElementById('btnAttach');
   const cmdModeTag = document.getElementById('cmdModeTag');
+  const agentListSection = document.getElementById('agentListSection');
+  const secretaryChatSection = document.getElementById('secretaryChatSection');
+  const confirmSection = document.getElementById('confirmSection');
 
   if (mode === null) {
     modeSelect.style.display = 'flex';
     cmdInputArea.style.display = 'none';
+    // 初期状態: 両方表示
+    agentListSection.style.display = '';
+    secretaryChatSection.style.display = secretaryChatSection.querySelector('#secretaryChat').children.length > 0 ? 'block' : 'none';
+    confirmSection.style.display = '';
     return;
   }
 
@@ -465,11 +472,19 @@ function setMode(mode) {
     cmdModeTag.className = 'dev';
     cmdInput.placeholder = '例: ポートフォリオサイトを作って';
     btnAttach.style.display = 'flex';
+    // 開発モード: AI従業員表示、秘書チャット非表示
+    agentListSection.style.display = '';
+    secretaryChatSection.style.display = 'none';
+    confirmSection.style.display = '';
   } else {
     cmdModeTag.textContent = '質問';
     cmdModeTag.className = 'ask';
     cmdInput.placeholder = '例: JavaScriptのクロージャーとは？';
     btnAttach.style.display = 'flex';
+    // 質問モード: AI従業員非表示、秘書チャット表示
+    agentListSection.style.display = 'none';
+    secretaryChatSection.style.display = 'block';
+    confirmSection.style.display = 'none';
   }
   cmdInput.focus();
 }
