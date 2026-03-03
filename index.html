@@ -229,6 +229,33 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 #outputModal .path-input-row button{padding:6px 14px;background:var(--accent);color:#1a1520;
   border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer}
 
+/* ===== QUESTION CONFIRM BAR ===== */
+#questionConfirmSection{background:#b388ff15;border-top:1px solid #b388ff40;padding:8px 12px}
+#questionConfirmInner{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#questionConfirmIcon{font-size:16px}
+#questionConfirmLabel{font-size:12px;color:#b388ff;font-weight:600}
+#questionConfirmText{font-size:11px;color:#ffffff60;max-width:200px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+#qcBtnQuestion{background:#b388ff30;color:#b388ff;border:1px solid #b388ff50;border-radius:6px;
+  padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+#qcBtnQuestion:hover{filter:brightness(1.2)}
+#qcBtnDev{background:#5cc87820;color:#5cc878;border:1px solid #5cc87840;border-radius:6px;
+  padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+#qcBtnDev:hover{filter:brightness(1.2)}
+/* Dev confirm bar (質問モードで開発指示時) */
+#devConfirmSection{background:#5cc87815;border-top:1px solid #5cc87840;padding:8px 12px}
+#devConfirmInner{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#devConfirmIcon{font-size:16px}
+#devConfirmLabel{font-size:12px;color:#5cc878;font-weight:600}
+#devConfirmText{font-size:11px;color:#ffffff60;max-width:200px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+#dcBtnDev{background:#5cc87830;color:#5cc878;border:1px solid #5cc87850;border-radius:6px;
+  padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+#dcBtnDev:hover{filter:brightness(1.2)}
+#dcBtnQuestion{background:#b388ff20;color:#b388ff;border:1px solid #b388ff40;border-radius:6px;
+  padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+#dcBtnQuestion:hover{filter:brightness(1.2)}
+
 /* ===== SECRETARY CHAT ===== */
 #secretaryChatSection{border-bottom:1px solid var(--border)}
 #secretaryChat{background:#0a0810;border-radius:6px;padding:8px;max-height:300px;overflow-y:auto;
@@ -271,6 +298,26 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
         <div class="stat-item"><span class="icon">&#x1F41B;</span><span class="val" id="statBugs">0</span></div>
       </div>
       <div id="statusOverlay"><div class="overlay-title"></div><div class="overlay-sub"></div></div>
+      <!-- 質問確認バー（開発モードで質問っぽい入力時） -->
+      <div id="questionConfirmSection" style="display:none">
+        <div id="questionConfirmInner">
+          <span id="questionConfirmIcon">&#x1F4AC;</span>
+          <span id="questionConfirmLabel">質問のようですが、開発として実行しますか？</span>
+          <span id="questionConfirmText"></span>
+          <button id="qcBtnQuestion" onclick="resolveQuestionConfirm('question')">&#x1F4AC; 秘書に質問</button>
+          <button id="qcBtnDev" onclick="resolveQuestionConfirm('dev')">&#x1F4CB; 開発で実行</button>
+        </div>
+      </div>
+      <!-- 開発確認バー（質問モードで開発っぽい入力時） -->
+      <div id="devConfirmSection" style="display:none">
+        <div id="devConfirmInner">
+          <span id="devConfirmIcon">&#x1F4CB;</span>
+          <span id="devConfirmLabel">開発指示のようですが、質問として送信しますか？</span>
+          <span id="devConfirmText"></span>
+          <button id="dcBtnDev" onclick="resolveDevConfirm('dev')">&#x1F4CB; 開発で実行</button>
+          <button id="dcBtnQuestion" onclick="resolveDevConfirm('question')">&#x1F4AC; 秘書に質問</button>
+        </div>
+      </div>
       <div id="commandBar">
         <!-- モード選択（デフォルト表示） -->
         <div id="modeSelect">
@@ -518,6 +565,65 @@ function setCommandRunning(running) {
 }
 // 後方互換
 function setLiveRunning(running) { setCommandRunning(running); }
+
+// 質問っぽい入力の検出パターン（開発モードで質問した場合の確認用）
+const QUESTION_KEYWORD_RE = /とは[？?]?$|って何|ですか[？?]?$|でしょうか|教えて|違いは|意味は|どういう|なぜ|どうして|how\s+(to|do|does|is)|what\s+(is|are|does)|why\s+(is|do|does)|explain|difference\s+between/i;
+let _pendingQuestionText = null; // 質問確認中の保留テキスト
+
+function checkQuestionInDevMode(text) {
+  if (currentMode !== 'dev') return false;
+  if (!QUESTION_KEYWORD_RE.test(text)) return false;
+  // 質問っぽい → 確認表示
+  _pendingQuestionText = text;
+  const section = document.getElementById('questionConfirmSection');
+  document.getElementById('questionConfirmText').textContent = text.length > 40 ? text.slice(0, 40) + '…' : text;
+  section.style.display = 'block';
+  return true;
+}
+
+function resolveQuestionConfirm(action) {
+  const section = document.getElementById('questionConfirmSection');
+  section.style.display = 'none';
+  const text = _pendingQuestionText;
+  _pendingQuestionText = null;
+  if (!text) return;
+  if (action === 'question') {
+    // 質問モードに切り替えて秘書に送信
+    setMode('ask');
+    handleQuestion(text);
+  } else {
+    // そのまま開発として実行
+    sendCommand(text);
+  }
+}
+
+// 開発っぽい入力の検出パターン（質問モードで開発指示した場合の確認用）
+const DEV_KEYWORD_RE = /作って|作成して|生成して|作る|つくって|つくる|書いて|開発して|実装して|構築して|追加して|修正して|変更して|削除して|デプロイ|ビルド|create|generate|build|make|develop|implement|deploy|fix|add|remove|update/i;
+let _pendingDevText = null;
+
+function checkDevInAskMode(text) {
+  if (currentMode !== 'ask') return false;
+  if (!DEV_KEYWORD_RE.test(text)) return false;
+  _pendingDevText = text;
+  const section = document.getElementById('devConfirmSection');
+  document.getElementById('devConfirmText').textContent = text.length > 40 ? text.slice(0, 40) + '…' : text;
+  section.style.display = 'block';
+  return true;
+}
+
+function resolveDevConfirm(action) {
+  const section = document.getElementById('devConfirmSection');
+  section.style.display = 'none';
+  const text = _pendingDevText;
+  _pendingDevText = null;
+  if (!text) return;
+  if (action === 'dev') {
+    setMode('dev');
+    sendCommand(text);
+  } else {
+    handleQuestion(text);
+  }
+}
 
 // ファイル作成キーワード検出パターン（幅広くカバー）
 const CREATE_KEYWORD_RE = /作って|作成|生成|新しい|作る|作り|つくって|つくる|書いて|開発して|実装して|構築|ページ|サイト|アプリ|ゲーム|create|generate|build|make|develop|implement/i;
@@ -2450,7 +2556,11 @@ function init() {
     const text = cmdInput.value.trim();
     if (!text) return;
     cmdInput.value = '';
-    if (currentMode === 'ask') { handleQuestion(text); return; }
+    if (currentMode === 'ask') {
+      if (checkDevInAskMode(text)) return;
+      handleQuestion(text); return;
+    }
+    if (checkQuestionInDevMode(text)) return;
     sendCommand(text);
   });
   cmdInput.addEventListener('keydown', (e) => {
@@ -2460,7 +2570,11 @@ function init() {
       if (!text) return;
       cmdInput.value = '';
       cmdInput.style.height = 'auto';
-      if (currentMode === 'ask') { handleQuestion(text); return; }
+      if (currentMode === 'ask') {
+        if (checkDevInAskMode(text)) return;
+        handleQuestion(text); return;
+      }
+      if (checkQuestionInDevMode(text)) return;
       sendCommand(text);
     }
   });
@@ -2664,6 +2778,8 @@ function handleQuestion(text) {
 
 // Make resolveConfirm globally accessible
 window.resolveConfirm = resolveConfirm;
+window.resolveQuestionConfirm = resolveQuestionConfirm;
+window.resolveDevConfirm = resolveDevConfirm;
 
 // Start
 init();
